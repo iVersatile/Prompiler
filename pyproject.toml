@@ -76,6 +76,7 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["B011"]
+"src/prompiler/compiler/prompt_synth.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"

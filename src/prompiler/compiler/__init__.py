@@ -3,5 +3,6 @@
 from __future__ import annotations
 
 from prompiler.compiler.model import synthesize_model
+from prompiler.compiler.prompt_synth import synthesize_prompt
 
-__all__ = ["synthesize_model"]
+__all__ = ["synthesize_model", "synthesize_prompt"]
