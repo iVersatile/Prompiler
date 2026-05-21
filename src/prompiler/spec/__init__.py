@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from prompiler.spec.loader import SpecLoadError, load_spec
 from prompiler.spec.model import Constraint, EntitySpec, FieldSpec, Label
 
-__all__ = ["Constraint", "EntitySpec", "FieldSpec", "Label"]
+__all__ = ["Constraint", "EntitySpec", "FieldSpec", "Label", "SpecLoadError", "load_spec"]
