@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from prompiler import __version__
+from prompiler.codegen import write as codegen_write
 from prompiler.obs import configure_logging
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
@@ -40,6 +41,23 @@ def _build_parser() -> argparse.ArgumentParser:
         "path",
         type=Path,
         help="Spec file or directory of prompt specs to validate.",
+    )
+
+    codegen = subparsers.add_parser(
+        "codegen",
+        help="Render a spec to a standalone vendored Python module.",
+    )
+    codegen.add_argument(
+        "spec",
+        type=Path,
+        help="Path to the spec YAML file to render.",
+    )
+    codegen.add_argument(
+        "-o",
+        "--out-dir",
+        type=Path,
+        default=Path(".prompiler/compiled"),
+        help="Output directory for the generated module (default: .prompiler/compiled).",
     )
     return parser
 
@@ -73,6 +91,23 @@ def _cmd_validate(path: Path) -> int:
     return 1 if had_issue else 0
 
 
+def _cmd_codegen(spec_path: Path, out_dir: Path) -> int:
+    if not spec_path.exists():
+        sys.stderr.write(f"prompiler codegen: path not found: {spec_path}\n")
+        return 2
+    if not spec_path.is_file():
+        sys.stderr.write(f"prompiler codegen: not a file: {spec_path}\n")
+        return 2
+    try:
+        spec = load_spec(spec_path)
+    except SpecLoadError as exc:
+        sys.stderr.write(f"{exc}\n")
+        return 1
+    out_path = codegen_write(spec, out_dir)
+    sys.stdout.write(f"{out_path}\n")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
     parser = _build_parser()
@@ -80,6 +115,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "validate":
         return _cmd_validate(args.path)
+    if args.command == "codegen":
+        return _cmd_codegen(args.spec, args.out_dir)
 
     parser.print_help()
     return 0
