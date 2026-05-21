@@ -18,7 +18,7 @@ Use this doc for:
 - **Python**: 3.11.x (CPython). Verify with `python3 --version`.
 - **uv**: 0.4.0 or newer. Install via the [official instructions](https://docs.astral.sh/uv/). Verify with `uv --version`.
 - **Docker**: Docker Desktop 4.30+ or Docker Engine 26+ with the `compose` plugin and `buildx`. Verify with `docker version` and `docker compose version`.
-- **Disk**: ~6 GB free (Ollama model layers + base images).
+- **Disk**: ~2 GB free (Ollama image ~1.2 GB + `qwen2.5:0.5b` model ~0.4 GB + headroom).
 - **Optional vendor credentials** (only needed for live-smoke):
   - `ANTHROPIC_API_KEY`
   - `OPENAI_API_KEY`
@@ -73,12 +73,14 @@ recorded cassettes for paid backends.
 ### 3.1 Start the Ollama sidecar
 
 ```bash
-docker compose -f docker-compose.test.yml up -d ollama
-docker compose -f docker-compose.test.yml logs -f ollama   # wait for "model loaded"
+docker compose -f docker-compose.test.yml up -d
+docker compose -f docker-compose.test.yml logs -f ollama-init   # wait for "digest verified"
 ```
 
-The compose file pins the model by digest, so the first run downloads ~4 GB and
-subsequent runs are cached.
+The compose file pins both the Ollama image and the `qwen2.5:0.5b` model
+manifest by SHA256 digest. The first run downloads ~0.4 GB into the named
+volume `prompiler-ollama-models`; subsequent runs reuse the cache and the
+`ollama-init` one-shot exits immediately after re-verifying the digest.
 
 ### 3.2 Run the integration tier
 
@@ -105,7 +107,7 @@ CLI subprocess exercises and the MCP server end-to-end (stdio + HTTP).
 - Backends: Ollama (still up from §3) + cassettes.
 
 ```bash
-docker compose -f docker-compose.test.yml up -d ollama
+docker compose -f docker-compose.test.yml up -d
 uv run pytest -m e2e -q
 ```
 
@@ -180,7 +182,7 @@ diff -q /tmp/run1.json /tmp/run2.json   # must exit 0
 For runtime determinism (against Ollama):
 
 ```bash
-docker compose -f docker-compose.test.yml up -d ollama
+docker compose -f docker-compose.test.yml up -d
 uv run prompiler extract examples/invoice.yaml --input examples/invoice_sample.txt -o /tmp/extract1.json
 uv run prompiler extract examples/invoice.yaml --input examples/invoice_sample.txt -o /tmp/extract2.json
 diff -q /tmp/extract1.json /tmp/extract2.json
