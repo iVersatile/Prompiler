@@ -90,16 +90,16 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 **Tasks**
 
-- EntitySpec Pydantic model (the spec describing specs).
-- YAML loader + schema validation.
-- `spec_hash` calculator.
-- Pydantic model synthesiser (`pydantic.create_model`) supporting: `string`, `integer`, `decimal`, `boolean`, `date`, `datetime`, `enum`, `array`, `object` (nested), `optional`.
-- Cross-field constraint compiler (validators).
-- Prompt synthesiser: builds a prompt from spec description, field descriptions, cite flag, and few-shot block (initially empty).
-- JSON Schema emitter from synthesised Pydantic model.
-- `prompiler.compile()` entry point.
-- `prompiler validate` CLI subcommand.
-- `[plan]` `prompiler codegen <spec>` CLI subcommand emitting `.prompiler/compiled/<name>.py` via a Jinja template. Static-codegen path complements the dynamic `pydantic.create_model` path: downstream projects vendor the generated file into their own repo for IDE autocomplete, type-checking, and offline imports without a `prompiler` runtime dependency. Generated file pins `COMPILER_PROTOCOL_VERSION` + `spec_hash` in a module-level constant so drift between vendored copy and live spec is detectable.
+- [x] EntitySpec Pydantic model (the spec describing specs).
+- [x] YAML loader + schema validation.
+- [x] `spec_hash` calculator.
+- [ ] Pydantic model synthesiser (`pydantic.create_model`) supporting: `string`, `integer`, `decimal`, `boolean`, `date`, `datetime`, `enum`, `array`, `object` (nested), `optional`.
+- [ ] Cross-field constraint compiler (validators).
+- [ ] Prompt synthesiser: builds a prompt from spec description, field descriptions, cite flag, and few-shot block (initially empty).
+- [ ] JSON Schema emitter from synthesised Pydantic model.
+- [ ] `prompiler.compile()` entry point.
+- [ ] `prompiler validate` CLI subcommand. (Linter substance — `prompiler.spec.linter` — landed in P1.4; CLI wrapper pending.)
+- [ ] `[plan]` `prompiler codegen <spec>` CLI subcommand emitting `.prompiler/compiled/<name>.py` via a Jinja template. Static-codegen path complements the dynamic `pydantic.create_model` path: downstream projects vendor the generated file into their own repo for IDE autocomplete, type-checking, and offline imports without a `prompiler` runtime dependency. Generated file pins `COMPILER_PROTOCOL_VERSION` + `spec_hash` in a module-level constant so drift between vendored copy and live spec is detectable.
 
 **Acceptance criteria**
 
