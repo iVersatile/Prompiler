@@ -210,3 +210,49 @@ def test_validate_non_yaml_files_ignored(tmp_path: Path) -> None:
     (tmp_path / "notes.txt").write_text("ignore me\n", encoding="utf-8")
     rc = main(["validate", str(tmp_path)])
     assert rc == 0
+
+
+@pytest.mark.unit
+def test_codegen_writes_module_to_out_dir(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    spec_path = _write_yaml(tmp_path / "invoice.yaml", _clean_extract_spec())
+    out_dir = tmp_path / "compiled"
+    rc = main(["codegen", str(spec_path), "-o", str(out_dir)])
+    assert rc == 0
+    generated = out_dir / "invoice.py"
+    assert generated.is_file()
+    source = generated.read_text(encoding="utf-8")
+    assert "class Invoice(BaseModel):" in source
+    assert "COMPILER_PROTOCOL_VERSION" in source
+    assert "SPEC_HASH" in source
+    out = capsys.readouterr().out
+    assert str(generated) in out
+
+
+@pytest.mark.unit
+def test_codegen_missing_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    missing = tmp_path / "nope.yaml"
+    rc = main(["codegen", str(missing)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "path not found" in err
+
+
+@pytest.mark.unit
+def test_codegen_directory_rejected(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    rc = main(["codegen", str(tmp_path)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "not a file" in err
+
+
+@pytest.mark.unit
+def test_codegen_load_error_returns_one(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    spec = _clean_extract_spec()
+    spec["spec_version"] = 2
+    f = _write_yaml(tmp_path / "invoice.yaml", spec)
+    rc = main(["codegen", str(f), "-o", str(tmp_path / "out")])
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert str(f) in err
