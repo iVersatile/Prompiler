@@ -1,5 +1,7 @@
 """prompiler — spec-to-artefact prompt compiler."""
 
+from __future__ import annotations
+
 __version__ = "0.0.0"
 
 COMPILER_PROTOCOL_VERSION = "1"
@@ -18,4 +20,12 @@ cached artefacts remain valid across upgrades. See docs/RULES.md §4
 for the spec_hash formula.
 """
 
-__all__ = ["COMPILER_PROTOCOL_VERSION", "__version__"]
+from prompiler.compiler import ArtefactBundle  # noqa: E402
+from prompiler.compiler import compile_spec as compile  # noqa: E402
+
+__all__ = [
+    "COMPILER_PROTOCOL_VERSION",
+    "ArtefactBundle",
+    "__version__",
+    "compile",
+]
