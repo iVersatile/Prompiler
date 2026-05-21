@@ -237,6 +237,31 @@ Decoupling the cache key from `prompiler.__version__` means downstream projects 
 
 ---
 
+## 11. GitHub Branch Protection on `main`
+
+The `main` branch is the single source of truth for releases and the only ref tags are cut from. Direct pushes, force-pushes, and untested merges to `main` must be impossible at the platform level — not merely discouraged by convention. Configure the following settings on GitHub (Settings → Branches → Branch protection rules → `main`) and keep them in sync with this section. Any change to required-check names below must be paired with the corresponding workflow job name in `.github/workflows/ci.yml`.
+
+### Required settings
+
+- **Require a pull request before merging.** Direct pushes to `main` are blocked. At least one approving review is required; reviews from CODEOWNERS are required when CODEOWNERS exists.
+- **Require linear history.** Merge commits are disabled. Only squash-merge or rebase-merge is allowed, so `git log main` stays a single straight line.
+- **Require status checks to pass before merging.** The following check names are required and must all be green on the PR head commit:
+  - `unit`
+  - `integration`
+  - `e2e`
+  - `pre-commit`
+- **Require branches to be up to date before merging.** Status checks must have been run against the latest `main`, not a stale base.
+- **Dismiss stale pull request approvals when new commits are pushed.** Re-approval is required after any push to the PR branch.
+- **Restrict who can push to matching branches.** Only repository administrators may bypass the above, and only in declared incident conditions.
+- **Do not allow force pushes.** Applies to everyone, including administrators.
+- **Do not allow deletions.** The `main` ref cannot be deleted.
+
+### Rationale
+
+Linear history makes the version-tag gate (§5) and the cassette-redaction audit trail meaningful — a force-push or merge commit can erase the very evidence that proves a release was clean. Dismissing stale approvals prevents an approved PR from being silently amended with new code that no human has read. The four required checks mirror the `pyproject.toml` test layout (`unit`, `integration`, `e2e`) plus the cross-cutting `pre-commit` gate from §2; if the workflow renames a job, this section and the GitHub setting must be updated in lockstep.
+
+---
+
 ## Inheritance from `~/.claude/rules/`
 
 These project rules sit on top of the user's global rules in `~/.claude/rules/common/` and `~/.claude/rules/python/`. Where conflicts exist, project rules win. Where this file is silent, global rules apply.

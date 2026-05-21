@@ -44,7 +44,7 @@ build-backend = "hatchling.build"
 packages = ["src/prompiler"]
 
 [tool.hatch.build.targets.sdist]
-include = ["src/prompiler", "README.md", "LICENSE"]
+include = ["src/prompiler", "README.md", "LICENSE", "NOTICE"]
 
 # -----------------------------------------------------------------------------
 # Ruff — lint + format. Gated in pre-commit (§2) on src/ and tests/.

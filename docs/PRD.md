@@ -447,3 +447,49 @@ fixtures_dir = "tests/fixtures"
 | spec_hash | sha256 of canonical YAML serialisation + `prompiler` version. |
 | Cassette | Recorded HTTP exchange replayed in tests (paid backends only). |
 | ADC | Google Application Default Credentials (free auth path for Gemini). |
+
+---
+
+## 12. V2+ Items Under Review
+
+> **Pending review — not part of the v1 contract.** Items in this section are candidates for re-evaluation post-v1 and may shift based on contributor signal, governance changes, or external constraints.
+
+### 12.1 Code of Conduct — Custom vs. Verbatim CC 2.1
+
+The v1 `CODE_OF_CONDUCT.md` is a customised adaptation of Contributor Covenant 2.1 (CC BY 4.0), not a verbatim copy. This section records the trade-off so a future reviewer can re-decide without re-deriving the analysis.
+
+**Project impact**
+
+| Dimension | Current state |
+|-----------|---------------|
+| Legal / IP | Apache-2.0 LICENSE untouched. CC BY 4.0 attribution requirement satisfied via the Attribution section in `CODE_OF_CONDUCT.md`. |
+| GitHub Community Standards | Filename `CODE_OF_CONDUCT.md` detected by GitHub → repo profile completeness checkbox satisfied. |
+| Enforcement surface | Custom 4-step ladder (no action / private warning / temporary restriction / permanent removal). Simpler than CC 2.1's 4-tier guidelines; stronger maintainer discretion clause; weaker written precedent. |
+| Reporting channel | GitHub Security Advisory (private). No email PII collected. Appeal path = reply on the original advisory thread. |
+| Contributor signal | Custom CoC reads as scannable and opinionated. Verbatim CC 2.1 would carry stronger external brand recognition. |
+| Governance future | Swap to verbatim CC 2.1 is a one-file replace if a foundation or large external contributor base later requires it. |
+
+**Product impact**
+
+- **Direct:** zero. CoC governs human behaviour; it does not touch the runtime, compile pipeline, codegen, MCP server, or cassette layer.
+- **Indirect:**
+  - Procurement / enterprise-eval checkbox cleared (file exists and is detectable).
+  - Triage flow routes conduct complaints to the advisory URL rather than maintainer inbox → no PII surface.
+
+**Risk register**
+
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| Contributor dispute escalates beyond the 4-step ladder | LOW | Maintainer discretion clause + advisory appeal path. |
+| "Unprofessional" perception from external eyes (foundation, sponsor, large contributor) | LOW | Attribution to CC 2.1 anchors legitimacy; swap cost is one file. |
+| Foundation onboarding later requires verbatim CC 2.1 | LOW | Swap is a single-file replace; no downstream artefacts depend on the custom text. |
+| Maintainer over-reach perception driven by discretion clause | MEDIUM | Soften discretion language when maintainer team grows beyond 3, or when first external contributor PR lands. |
+
+**Recommendation**
+
+Keep the custom CoC for v1. Re-evaluate when **either** trigger fires:
+
+1. First external contributor PR is opened.
+2. Maintainer team grows beyond 3 people.
+
+At that point reassess against verbatim CC 2.1 with the risk register above as the baseline.
