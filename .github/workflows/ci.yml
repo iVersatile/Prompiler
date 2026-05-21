@@ -1,0 +1,146 @@
+# prompiler — CI
+#
+# Required status checks per docs/PLAN.md §P0 (branch protection on `main`):
+#   - pre-commit
+#   - unit
+#   - integration
+#   - e2e
+#
+# Test tiers mirror docs/MANUAL_TESTING.md §§2–4. P0 ships skeleton only —
+# integration/e2e jobs treat pytest's exit code 5 ("no tests collected") as
+# success so they stay green while later phases populate the markers.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.4.30"
+
+jobs:
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run pre-commit hooks (pre-commit stage only)
+        run: uvx pre-commit run --all-files --show-diff-on-failure --color always
+
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run unit tier
+        run: uv run pytest -m unit --cov=prompiler --cov-report=term-missing --cov-fail-under=80 -q
+
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run integration tier
+        # docker-compose.test.yml (Ollama sidecar) lands in a later P0 task; until
+        # then the marker collects nothing and pytest exits 5. Treat as success.
+        run: |
+          set +e
+          uv run pytest -m integration -q
+          code=$?
+          set -e
+          if [ "$code" = "5" ]; then
+            echo "::notice::No integration tests collected — P0 skeleton stage."
+            exit 0
+          fi
+          exit "$code"
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run e2e tier
+        run: |
+          set +e
+          uv run pytest -m e2e -q
+          code=$?
+          set -e
+          if [ "$code" = "5" ]; then
+            echo "::notice::No e2e tests collected — P0 skeleton stage."
+            exit 0
+          fi
+          exit "$code"
