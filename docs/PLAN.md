@@ -55,7 +55,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] Repo scaffolding: `pyproject.toml` (uv-managed), `src/prompiler/`, `tests/`, `docs/`.
 - [x] Lint/format: `ruff` (lint + format), `mypy --strict`. `black` role covered by `ruff format` to avoid double-formatter drift.
 - [x] CI skeleton: GitHub Actions with `unit`, `integration`, `e2e` jobs.
-- [ ] `docker-compose.test.yml` with Ollama sidecar + pinned model digest.
+- [x] `docker-compose.test.yml` with Ollama sidecar + pinned model digest.
 - [ ] Multi-stage `Dockerfile` for production image: `uv`-based build stage + `python:3.11-slim` (or distroless) runtime, non-root UID, read-only rootfs where practical, multi-arch (`linux/amd64`, `linux/arm64`) via `docker buildx`, `/healthz` endpoint, OCI image labels (`org.opencontainers.image.{source,version,revision,licenses}`).
 - [ ] Apache 2.0 LICENSE, NOTICE, CONTRIBUTING, CODE_OF_CONDUCT.
 - [ ] Pre-commit hooks: ruff, black, mypy, `prompiler validate prompts/` (no-op until P1).
