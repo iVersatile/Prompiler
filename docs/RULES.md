@@ -148,6 +148,15 @@ Before beginning any new phase in `docs/PLAN.md`:
 
 The scoped review keeps token cost bounded as the project grows.
 
+### 6.1 First-phase carve-out
+
+The Phase Start Gate does **not** apply to the very first task of the very first phase (P0). At that moment:
+
+- There is no prior CI history to verify green.
+- There is no `<previous-phase-tag>` to diff against for the scoped review.
+
+The gate resumes from the first task of the **second** phase onward, using the tag of the just-completed phase as the diff base. A synthetic baseline tag (e.g., `v0.0.0-bootstrap`) cut on `main` after the initial bootstrap commit gives §6 step 2 a concrete reference point for P1's first invocation.
+
 ---
 
 ## 7. Phase Done Gate
