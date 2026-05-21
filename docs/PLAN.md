@@ -98,8 +98,8 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] Prompt synthesiser: builds a prompt from spec description, field descriptions, cite flag, and few-shot block (initially empty).
 - [x] JSON Schema emitter from synthesised Pydantic model.
 - [x] `prompiler.compile()` entry point.
-- [ ] **[in-progress]** `prompiler validate` CLI subcommand. (Linter substance — `prompiler.spec.linter` — landed in P1.4; CLI wrapper pending.)
-- [ ] `[plan]` `prompiler codegen <spec>` CLI subcommand emitting `.prompiler/compiled/<name>.py` via a Jinja template. Static-codegen path complements the dynamic `pydantic.create_model` path: downstream projects vendor the generated file into their own repo for IDE autocomplete, type-checking, and offline imports without a `prompiler` runtime dependency. Generated file pins `COMPILER_PROTOCOL_VERSION` + `spec_hash` in a module-level constant so drift between vendored copy and live spec is detectable.
+- [x] `prompiler validate` CLI subcommand. (Linter substance — `prompiler.spec.linter` — landed in P1.4; CLI wrapper added in P1.10.)
+- [ ] **[in-progress]** `prompiler codegen <spec>` CLI subcommand emitting `.prompiler/compiled/<name>.py` via a Jinja template. Static-codegen path complements the dynamic `pydantic.create_model` path: downstream projects vendor the generated file into their own repo for IDE autocomplete, type-checking, and offline imports without a `prompiler` runtime dependency. Generated file pins `COMPILER_PROTOCOL_VERSION` + `spec_hash` in a module-level constant so drift between vendored copy and live spec is detectable.
 
 **Acceptance criteria**
 
