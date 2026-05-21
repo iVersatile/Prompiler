@@ -38,3 +38,17 @@ The pre-commit and pre-push gates enforce most of the above. Do not rely on agen
 ## When in doubt
 
 Ask the user. Do not self-approve phase completion, tag creation, or any irreversible push under any circumstance.
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Canonical defaults (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context. `CONTEXT.md` + `docs/adr/` at repo root. See `docs/agents/domain.md`.

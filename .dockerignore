@@ -1,0 +1,63 @@
+# .dockerignore — keep the build context small and the image clean.
+#
+# Anything matched here is NOT sent to the Docker daemon during `docker build`
+# / `docker buildx build`, which means it cannot land in any layer and cannot
+# bloat the build cache key. Pair this with the explicit `COPY` list in the
+# Dockerfile (pyproject.toml, uv.lock, README.md, LICENSE, NOTICE, src/) for
+# defense in depth.
+
+# ---------- VCS ----------
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# ---------- Editor / OS noise ----------
+.idea/
+.vscode/
+.editorconfig
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---------- Python build / cache artefacts ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# ---------- Repo-only tooling (not needed at runtime) ----------
+docs/
+scripts/
+tests/
+.pre-commit-config.yaml
+docker-compose.test.yml
+Dockerfile
+.dockerignore
+
+# ---------- Scratch / local work ----------
+.scratch/
+*.log
+
+# ---------- Secrets — never bake into image ----------
+.env
+.env.*
+!.env.example
+
+# ---------- Test fixtures / recorded cassettes ----------
+cassettes/
+fixtures/

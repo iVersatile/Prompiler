@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from prompiler import __version__
+from prompiler.obs import configure_logging
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -49,6 +50,7 @@ def _cmd_validate(path: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    configure_logging()
     parser = _build_parser()
     args = parser.parse_args(argv)
 
