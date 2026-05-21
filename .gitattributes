@@ -1,0 +1,36 @@
+# Normalize line endings to LF on commit; check out platform-native where required.
+* text=auto eol=lf
+
+# Source
+*.py            text eol=lf
+*.pyi           text eol=lf
+*.toml          text eol=lf
+*.yaml          text eol=lf
+*.yml           text eol=lf
+*.json          text eol=lf
+*.md            text eol=lf
+*.txt           text eol=lf
+*.cfg           text eol=lf
+*.ini           text eol=lf
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+
+# Lockfiles — text, but treat as generated for diff/merge UX.
+uv.lock         text eol=lf linguist-generated=true
+poetry.lock     text eol=lf linguist-generated=true
+package-lock.json text eol=lf linguist-generated=true
+
+# Cassettes (P2): JSON/YAML on disk but conceptually opaque — keep diffs intact, never auto-merge.
+cassettes/**    text eol=lf merge=union
+
+# Binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.pdf           binary
+*.zip           binary
+*.tar           binary
+*.gz            binary
+*.tgz           binary

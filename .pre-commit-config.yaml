@@ -1,0 +1,101 @@
+# Pre-commit configuration for prompiler.
+#
+# Source of truth: docs/RULES.md §2 (pre-commit gate) and §3 (pre-push gate).
+# Do not let this file diverge from RULES.md without updating RULES.md in the
+# same commit.
+#
+# Install:
+#   uv run pre-commit install
+#   uv run pre-commit install --hook-type pre-push
+#   uv run pre-commit install --hook-type commit-msg
+#
+# Manual sweep:
+#   uv run pre-commit run --all-files
+
+default_language_version:
+  python: python3.11
+
+default_stages: [pre-commit]
+
+repos:
+  # ---------------------------------------------------------------------------
+  # §2 Pre-commit gate — must pass before any commit lands.
+  # ---------------------------------------------------------------------------
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check (lint)
+        entry: uv run ruff check src/ tests/
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: ruff-format-check
+        name: ruff format --check
+        entry: uv run ruff format --check src/ tests/
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: mypy
+        name: mypy src/prompiler
+        entry: uv run mypy src/prompiler
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: pytest-unit
+        name: pytest (unit tier, coverage >= 80%)
+        entry: uv run pytest tests/ -m unit --cov=prompiler --cov-fail-under=80 -q
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # ---------------------------------------------------------------------------
+  # §8 Secret scanning — runs on every commit AND on push (with --diff range).
+  # ---------------------------------------------------------------------------
+
+  - repo: local
+    hooks:
+      - id: scan-secrets-staged
+        name: scan secrets (staged changes)
+        entry: python scripts/scan_secrets.py --staged
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+      - id: scan-secrets-push
+        name: scan secrets (push range)
+        entry: python scripts/scan_secrets.py --pre-push
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ---------------------------------------------------------------------------
+  # §3 Pre-push gate — clean working tree only. Pytest is NOT re-run; §2
+  # already proved tests green at commit time.
+  # ---------------------------------------------------------------------------
+
+  - repo: local
+    hooks:
+      - id: working-tree-clean
+        name: working tree clean (no uncommitted changes)
+        entry: python scripts/check_clean_tree.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+  # ---------------------------------------------------------------------------
+  # §4 LESSONS_LEARNT citation gate — fires on `fix:` / `perf:` commit subjects.
+  # Reads the staged commit message; passes for non-fix/perf subjects.
+  # ---------------------------------------------------------------------------
+
+  - repo: local
+    hooks:
+      - id: lesson-cite
+        name: lesson citation check (fix:/perf:)
+        entry: python scripts/check_lesson_cite.py
+        language: system
+        pass_filenames: true
+        stages: [commit-msg]
