@@ -1,10 +1,13 @@
-"""Pydantic model synthesiser — turn an EntitySpec into a runtime BaseModel (P1.5).
+"""Pydantic model synthesiser — turn an EntitySpec into a runtime BaseModel (P1.5/P1.6).
 
 Public entry: ``synthesize_model(spec) -> type[BaseModel]``.
 
 Determinism: building the same spec twice yields models with equal JSON Schemas
 (PLAN.md L107). Class names derive from ``spec.name`` (snake_case → PascalCase);
 nested object models compose parent + child name to keep names unique.
+
+Cross-field constraints (PLAN.md L97) compile into ``model_validator(mode="after")``
+hooks attached to a dynamic base class — see ``prompiler.compiler.constraints``.
 """
 
 from __future__ import annotations
@@ -13,8 +16,9 @@ import datetime as _dt
 from decimal import Decimal
 from typing import Annotated, Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
+from prompiler.compiler.constraints import check_constraints, compile_constraints
 from prompiler.spec import EntitySpec, FieldSpec
 
 _SCALAR_TYPE_MAP: dict[str, type[Any]] = {
@@ -29,25 +33,58 @@ _SCALAR_TYPE_MAP: dict[str, type[Any]] = {
 _NUMERIC_TYPES = frozenset({"integer", "decimal"})
 
 
+class _DefaultBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
 def synthesize_model(spec: EntitySpec) -> type[BaseModel]:
     """Build a fresh Pydantic model class from an EntitySpec."""
+    allowed_fields = _top_level_field_names(spec)
+    compiled = compile_constraints(spec.cross_field_constraints, allowed_fields)
+    base = _make_constraint_base(compiled) if compiled else _DefaultBase
     class_name = _pascal_case(spec.name)
     if spec.task == "extract":
-        return _build_extract_model(class_name, spec.fields or [])
-    return _build_classify_model(class_name, spec)
+        return _build_extract_model(class_name, spec.fields or [], base)
+    return _build_classify_model(class_name, spec, base)
 
 
-def _build_extract_model(class_name: str, fields: list[FieldSpec]) -> type[BaseModel]:
+def _top_level_field_names(spec: EntitySpec) -> set[str]:
+    if spec.task == "extract":
+        return {f.name for f in (spec.fields or []) if f.name}
+    if spec.allow_multi_label:
+        return {"labels"}
+    return {"label"}
+
+
+def _make_constraint_base(
+    compiled: list[tuple[str, str, Any]],
+) -> type[BaseModel]:
+    class _ConstraintBase(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+
+        @model_validator(mode="after")
+        def _check_cross_fields(self) -> _ConstraintBase:
+            check_constraints(self, compiled)
+            return self
+
+    return _ConstraintBase
+
+
+def _build_extract_model(
+    class_name: str, fields: list[FieldSpec], base: type[BaseModel]
+) -> type[BaseModel]:
     field_defs: dict[str, tuple[Any, Any]] = {}
     for field in fields:
         if field.name is None:
             continue
         annotation, default = _field_annotation_and_default(field, class_name)
         field_defs[field.name] = (annotation, default)
-    return _make_model(class_name, field_defs)
+    return _make_model(class_name, field_defs, base)
 
 
-def _build_classify_model(class_name: str, spec: EntitySpec) -> type[BaseModel]:
+def _build_classify_model(
+    class_name: str, spec: EntitySpec, base: type[BaseModel]
+) -> type[BaseModel]:
     label_names = tuple(label.name for label in (spec.labels or []))
     literal: Any = Literal[label_names]
     field_defs: dict[str, tuple[Any, Any]]
@@ -55,7 +92,7 @@ def _build_classify_model(class_name: str, spec: EntitySpec) -> type[BaseModel]:
         field_defs = {"labels": (cast(Any, list[literal]), ...)}
     else:
         field_defs = {"label": (literal, ...)}
-    return _make_model(class_name, field_defs)
+    return _make_model(class_name, field_defs, base)
 
 
 def _field_annotation_and_default(field: FieldSpec, parent_name: str) -> tuple[Any, Any]:
@@ -79,7 +116,7 @@ def _annotation_for(field: FieldSpec, parent_name: str) -> Any:
         return cast(Any, list[inner])
     if t == "object":
         sub_name = parent_name + _pascal_case(field.name or "Item")
-        return _build_extract_model(sub_name, field.fields or [])
+        return _build_extract_model(sub_name, field.fields or [], _DefaultBase)
     raise ValueError(f"unsupported field type: {t!r}")
 
 
@@ -96,10 +133,14 @@ def _scalar_constraint(field: FieldSpec) -> Any | None:
     return None
 
 
-def _make_model(class_name: str, field_defs: dict[str, tuple[Any, Any]]) -> type[BaseModel]:
+def _make_model(
+    class_name: str,
+    field_defs: dict[str, tuple[Any, Any]],
+    base: type[BaseModel],
+) -> type[BaseModel]:
     return create_model(  # type: ignore[call-overload, no-any-return]
         class_name,
-        __config__=ConfigDict(extra="forbid"),
+        __base__=base,
         **field_defs,
     )
 
