@@ -54,7 +54,7 @@ repos:
         stages: [pre-commit]
 
       - id: prompiler-validate
-        name: prompiler validate prompts/ (P0 stub: existence check)
+        name: "prompiler validate prompts/ (P0 stub: existence check)"
         entry: uv run prompiler validate prompts/
         language: system
         pass_filenames: false
