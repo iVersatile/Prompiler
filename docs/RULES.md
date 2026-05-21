@@ -109,6 +109,10 @@ The `Lesson-skip:` trailer is the escape hatch for `fix:` / `perf:` commits wher
 
 This rule is enforced by the hook, not by agent discipline. Do not rely on remembering it — the commit will fail at `git commit` time if the body is missing.
 
+### Docs-only relaxation (prepare-commit-msg stage)
+
+`scripts/prepare_commit_msg.py` runs at the `prepare-commit-msg` stage. When `git diff --cached --name-only` returns only `*.md` paths, it appends a hint block to the commit-message buffer pointing the author at a bare `Lesson-skip:` trailer. For docs-only diffs, `scripts/check_lesson_cite.py` accepts the trailer at minimum length 0 — i.e., a bare `Lesson-skip:` with no reason text is sufficient. The relaxation is bounded to diffs whose every changed path ends `.md`; the moment a non-Markdown file enters the stage, the regular ≥10-char rule re-applies. This removes friction from doc-only `fix:` / `perf:` commits (typo fixes, link repairs, copy-edits) without weakening the gate for any commit that touches code.
+
 ### Adding a new lesson
 
 On user "add lesson" command:
@@ -202,6 +206,34 @@ Wrapper script: `scripts/local_test.py`.
 5. Structured logging: at `--log-level debug`, a compile invocation must emit per-stage decision records and `compile.start` / `compile.done` markers. The script asserts these via stdout/stderr capture.
 
 The local test gate verifies expected behaviour against committed example specs before a release. It catches regressions that pass unit tests but break end-to-end CLI or MCP behaviour.
+
+---
+
+## 10. `spec_hash` and `COMPILER_PROTOCOL_VERSION`
+
+The compiler keys every cached artefact by a content-addressed `spec_hash`:
+
+```
+spec_hash = SHA-256( canonical_yaml(spec) || COMPILER_PROTOCOL_VERSION )
+```
+
+`COMPILER_PROTOCOL_VERSION` is a module-level constant in `src/prompiler/__init__.py` (string, starts at `"1"`). It is **not** the project's release version. Patch and minor releases of `prompiler` must not invalidate downstream caches — only changes that alter the compiler's wire-level output should.
+
+### When to bump
+
+Bump `COMPILER_PROTOCOL_VERSION` (and only then) if any of the following change in a way that produces different bytes from the same input spec:
+
+1. The internal AST grammar — node kinds, field names, evaluation order.
+2. The per-adapter projection schema — JSON Schema emitted for Claude, OpenAI, Gemini, Ollama tool/function-call payloads.
+3. The canonical-YAML serialisation rules — key ordering, scalar style, anchor handling, the rules the hasher feeds before SHA-256.
+
+### When not to bump
+
+Do not bump for: bug fixes that produce identical output for valid inputs, CLI/UX changes, MCP transport changes, internal refactors, dependency updates, documentation, or test changes. The constant tracks *output identity*, not project identity.
+
+### Rationale
+
+Decoupling the cache key from `prompiler.__version__` means downstream projects can upgrade `prompiler` on patch/minor bumps without rebuilding every artefact under `.prompiler/compiled/`. Generated codegen files (P1) embed both `COMPILER_PROTOCOL_VERSION` and `spec_hash` as module-level constants so drift between a vendored compiled file and the live spec is detectable by a single import + equality check.
 
 ---
 

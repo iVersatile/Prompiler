@@ -29,12 +29,34 @@ Exit codes:
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 SUBJECT_TRIGGER = re.compile(r"^(fix|perf)(\([^)]+\))?!?:")
 LESSON_CITATION = re.compile(r"\bApplying LL-\d{3}\b")
 LESSON_SKIP = re.compile(r"^Lesson-skip:\s*(.{10,})$", re.MULTILINE)
+LESSON_SKIP_BARE = re.compile(r"^Lesson-skip:\s*(.*)$", re.MULTILINE)
+
+
+def _staged_is_docs_only() -> bool:
+    """Return True if every staged path ends in ``.md``.
+
+    Docs-only commits relax the ``Lesson-skip`` trailer minimum length from
+    10 chars to 0 (see docs/RULES.md §4). A bare ``Lesson-skip:`` is enough.
+    """
+    result = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    paths = [line for line in result.stdout.splitlines() if line]
+    if not paths:
+        return False
+    return all(p.lower().endswith(".md") for p in paths)
 
 
 def _read_message(path: Path) -> str:
@@ -101,6 +123,8 @@ def main(argv: list[str]) -> int:
     if LESSON_CITATION.search(message):
         return 0
     if LESSON_SKIP.search(message):
+        return 0
+    if _staged_is_docs_only() and LESSON_SKIP_BARE.search(message):
         return 0
 
     _fail(f"Subject `{subject}` triggers lesson-citation rule.")
