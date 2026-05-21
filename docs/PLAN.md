@@ -52,8 +52,8 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 **Tasks**
 
-- [ ] Repo scaffolding: `pyproject.toml` (uv-managed), `src/prompiler/`, `tests/`, `docs/`.
-- [ ] Lint/format: `ruff`, `black`, `mypy --strict`.
+- [x] Repo scaffolding: `pyproject.toml` (uv-managed), `src/prompiler/`, `tests/`, `docs/`.
+- [x] Lint/format: `ruff` (lint + format), `mypy --strict`. `black` role covered by `ruff format` to avoid double-formatter drift.
 - [ ] CI skeleton: GitHub Actions with `unit`, `integration`, `e2e` jobs.
 - [ ] `docker-compose.test.yml` with Ollama sidecar + pinned model digest.
 - [ ] Multi-stage `Dockerfile` for production image: `uv`-based build stage + `python:3.11-slim` (or distroless) runtime, non-root UID, read-only rootfs where practical, multi-arch (`linux/amd64`, `linux/arm64`) via `docker buildx`, `/healthz` endpoint, OCI image labels (`org.opencontainers.image.{source,version,revision,licenses}`).
@@ -64,7 +64,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] `[plan]` Editor/git scaffolding: `.editorconfig` (charset/EOL/indent), `.gitattributes` (LF normalisation, `uv.lock`/`poetry.lock`/`package-lock.json` flagged `linguist-generated=true`, `cassettes/**` flagged `merge=union`, binary patterns), `.gitignore` (Python build artefacts, venv, lint/type caches, IDE/OS files, `docs/_archive/`, `.env*`, `out/`, `artefacts/`), `.python-version` (`3.11` pin for `uv`/`pyenv` matching `.pre-commit-config.yaml` language pin).
 - [x] `[plan]` Branch model: `main` (release-only) + `dev` (daily progress). All work lands on `dev` via topic branches; release tags (`vMAJOR.MINOR.PATCH`) are cut on `main` after a `dev → main` merge. Document in `docs/RULES.md` §5.
 - [ ] `[plan]` GitHub branch protection on `main`: require PR, require linear history, require status checks (`unit`, `integration`, `e2e`, `pre-commit`) to pass, dismiss stale approvals on new commits, restrict force-pushes and deletions.
-- [ ] `[plan]` Commit `uv.lock` to the repo: this is an application, not a library; reproducible installs require the lockfile. Documented inline in `.gitignore`.
+- [x] `[plan]` Commit `uv.lock` to the repo: this is an application, not a library; reproducible installs require the lockfile. Documented inline in `.gitignore`.
 - [x] `[plan]` Hook helper scripts under `scripts/`: `scan_secrets.py` (pre-push secret scan), `check_clean_tree.py` (pre-push working-tree-clean enforcement), `check_lesson_cite.py` (commit-msg `fix:`/`perf:` LL-citation gate), `new_lesson.py` (LL-NNN register helper), `local_test.py` (local parity for CI gates).
 - [x] `[plan]` Agent pointer `CLAUDE.md` at repo root referencing `docs/RULES.md` as the single source of truth for project rules; inheriting from global `~/.claude/rules/{common,python}/`.
 - [x] `[plan]` Process docs in `docs/`: `RULES.md` (gates, tagging, phase boundaries), `MANUAL_TESTING.md` (local verification recipes), `LESSONS_LEARNT.md` (seeded LL register with `LL-NNN` IDs for the `fix:`/`perf:` citation gate).
