@@ -93,7 +93,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] EntitySpec Pydantic model (the spec describing specs).
 - [x] YAML loader + schema validation.
 - [x] `spec_hash` calculator.
-- [ ] Pydantic model synthesiser (`pydantic.create_model`) supporting: `string`, `integer`, `decimal`, `boolean`, `date`, `datetime`, `enum`, `array`, `object` (nested), `optional`.
+- [x] Pydantic model synthesiser (`pydantic.create_model`) supporting: `string`, `integer`, `decimal`, `boolean`, `date`, `datetime`, `enum`, `array`, `object` (nested), `optional`.
 - [ ] Cross-field constraint compiler (validators).
 - [ ] Prompt synthesiser: builds a prompt from spec description, field descriptions, cite flag, and few-shot block (initially empty).
 - [ ] JSON Schema emitter from synthesised Pydantic model.
