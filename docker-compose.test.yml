@@ -1,0 +1,96 @@
+# docker-compose.test.yml — Ollama sidecar for the integration + e2e test tiers.
+#
+# Source of truth: docs/architecture.md §1.5 (test-time pipeline) and §3
+# (tiered tests). Determinism contract for `adapter-ollama` requires the
+# model to be pinned by digest — see docs/architecture.md §4.
+#
+# Hard constraints (CLAUDE.md / docs/RULES.md §8):
+#   - Loopback bind only (127.0.0.1) — never expose Ollama to the LAN.
+#   - Image pinned by digest, not tag, so CI is reproducible.
+#   - Model manifest digest verified by the init container before tests run.
+#
+# Model choice: qwen2.5:0.5b. ~380 MB on disk, fits CI runners, supports
+# JSON mode and tool-calling — sufficient for the adapter-contract surface
+# the integration + e2e tiers exercise. Override by editing both the image
+# pin and the EXPECTED_MANIFEST_SHA below in lockstep.
+
+name: prompiler-test
+
+services:
+  ollama:
+    # ollama/ollama:0.5.4 — pinned by digest per RULES §8.
+    image: ollama/ollama:0.5.4@sha256:18bfb1d605604fd53dcad20d0556df4c781e560ebebcd923454d627c994a0e37
+    container_name: prompiler-ollama
+    ports:
+      # Loopback bind only. Inside the container, OLLAMA_HOST still binds
+      # 0.0.0.0 so docker's port-publish can reach it from the host's
+      # 127.0.0.1. The bind never leaves the host.
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_HOST: "0.0.0.0:11434"
+      OLLAMA_KEEP_ALIVE: "24h"
+      OLLAMA_NUM_PARALLEL: "1"
+    healthcheck:
+      # Healthy only once the init container has pulled the model.
+      # `ollama list` exits 0 even with no models, so we grep the tag.
+      test: ["CMD-SHELL", "ollama list | grep -q 'qwen2.5:0.5b'"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+      start_period: 10s
+    restart: unless-stopped
+
+  ollama-init:
+    # Same image, no port publish — runs once to pull + verify the model
+    # digest, then exits. The shared volume hands the cache off to the
+    # long-running `ollama` service.
+    image: ollama/ollama:0.5.4@sha256:18bfb1d605604fd53dcad20d0556df4c781e560ebebcd923454d627c994a0e37
+    container_name: prompiler-ollama-init
+    depends_on:
+      ollama:
+        # `service_started` (not `service_healthy`) — the daemon's health
+        # check requires the model, which is what this container provides.
+        # Avoids a circular wait.
+        condition: service_started
+    environment:
+      OLLAMA_HOST: "ollama:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        EXPECTED_MANIFEST_SHA="a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67"
+        MANIFEST_PATH="/root/.ollama/models/manifests/registry.ollama.ai/library/qwen2.5/0.5b"
+
+        echo "[init] waiting for ollama daemon..."
+        until ollama list >/dev/null 2>&1; do
+          sleep 2
+        done
+
+        if ! ollama list | grep -q 'qwen2.5:0.5b'; then
+          echo "[init] pulling qwen2.5:0.5b..."
+          ollama pull qwen2.5:0.5b
+        else
+          echo "[init] qwen2.5:0.5b already present."
+        fi
+
+        if [ ! -f "$MANIFEST_PATH" ]; then
+          echo "[init] FAIL: manifest not found at $MANIFEST_PATH" >&2
+          exit 1
+        fi
+        ACTUAL_SHA="$(sha256sum "$MANIFEST_PATH" | cut -d' ' -f1)"
+        if [ "$ACTUAL_SHA" != "$EXPECTED_MANIFEST_SHA" ]; then
+          echo "[init] FAIL: manifest digest mismatch" >&2
+          echo "[init]   expected $EXPECTED_MANIFEST_SHA" >&2
+          echo "[init]   got      $ACTUAL_SHA" >&2
+          exit 1
+        fi
+        echo "[init] qwen2.5:0.5b manifest digest verified."
+    restart: "no"
+
+volumes:
+  ollama-models:
+    name: prompiler-ollama-models
