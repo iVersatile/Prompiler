@@ -58,7 +58,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] `docker-compose.test.yml` with Ollama sidecar + pinned model digest.
 - [ ] Multi-stage `Dockerfile` for production image: `uv`-based build stage + `python:3.11-slim` (or distroless) runtime, non-root UID, read-only rootfs where practical, multi-arch (`linux/amd64`, `linux/arm64`) via `docker buildx`, `/healthz` endpoint, OCI image labels (`org.opencontainers.image.{source,version,revision,licenses}`).
 - [ ] Apache 2.0 LICENSE, NOTICE, CONTRIBUTING, CODE_OF_CONDUCT.
-- [ ] Pre-commit hooks: ruff, black, mypy, `prompiler validate prompts/` (no-op until P1).
+- [x] Pre-commit hooks: ruff, black, mypy, `prompiler validate prompts/` (no-op until P1).
 - [ ] Logging skeleton (JSON Lines).
 - [ ] MCP server skeleton: `127.0.0.1`-bound stub exposing `/healthz` returning `200 {"status":"ok"}`. Full tool registration, resource handlers, and stdio transport deferred to P6 — this skeleton exists so every later phase can smoke-test the integration surface and CI can assert the loopback bind policy from day one.
 - [x] `[plan]` Editor/git scaffolding: `.editorconfig` (charset/EOL/indent), `.gitattributes` (LF normalisation, `uv.lock`/`poetry.lock`/`package-lock.json` flagged `linguist-generated=true`, `cassettes/**` flagged `merge=union`, binary patterns), `.gitignore` (Python build artefacts, venv, lint/type caches, IDE/OS files, `docs/_archive/`, `.env*`, `out/`, `artefacts/`), `.python-version` (`3.11` pin for `uv`/`pyenv` matching `.pre-commit-config.yaml` language pin).

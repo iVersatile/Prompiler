@@ -53,6 +53,13 @@ repos:
         pass_filenames: false
         stages: [pre-commit]
 
+      - id: prompiler-validate
+        name: prompiler validate prompts/ (P0 stub: existence check)
+        entry: uv run prompiler validate prompts/
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
   # ---------------------------------------------------------------------------
   # §8 Secret scanning — runs on every commit AND on push (with --diff range).
   # ---------------------------------------------------------------------------
