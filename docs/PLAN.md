@@ -68,6 +68,8 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] `[plan]` Hook helper scripts under `scripts/`: `scan_secrets.py` (pre-push secret scan), `check_clean_tree.py` (pre-push working-tree-clean enforcement), `check_lesson_cite.py` (commit-msg `fix:`/`perf:` LL-citation gate), `new_lesson.py` (LL-NNN register helper), `local_test.py` (local parity for CI gates).
 - [x] `[plan]` Agent pointer `CLAUDE.md` at repo root referencing `docs/RULES.md` as the single source of truth for project rules; inheriting from global `~/.claude/rules/{common,python}/`.
 - [x] `[plan]` Process docs in `docs/`: `RULES.md` (gates, tagging, phase boundaries), `MANUAL_TESTING.md` (local verification recipes), `LESSONS_LEARNT.md` (seeded LL register with `LL-NNN` IDs for the `fix:`/`perf:` citation gate).
+- [x] `[plan]` `COMPILER_PROTOCOL_VERSION` constant in `src/prompiler/__init__.py` with bump-policy docstring. Used in `spec_hash = SHA-256(canonical_yaml(spec) || COMPILER_PROTOCOL_VERSION)` so cached artefacts survive `prompiler` patch/minor upgrades and only invalidate when the AST grammar, per-adapter projection schema, or canonical-YAML serialisation rules change.
+- [x] `[plan]` `prepare-commit-msg` hook (`scripts/prepare_commit_msg.py`) auto-suggests a bare `Lesson-skip:` trailer when the staged diff is `*.md`-only; `scripts/check_lesson_cite.py` relaxes the trailer minimum-length from 10 chars to 0 for those scopes. Removes friction on docs-only `fix:`/`perf:` commits without weakening the gate for code commits.
 
 **Acceptance criteria**
 
@@ -97,6 +99,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - JSON Schema emitter from synthesised Pydantic model.
 - `prompiler.compile()` entry point.
 - `prompiler validate` CLI subcommand.
+- `[plan]` `prompiler codegen <spec>` CLI subcommand emitting `.prompiler/compiled/<name>.py` via a Jinja template. Static-codegen path complements the dynamic `pydantic.create_model` path: downstream projects vendor the generated file into their own repo for IDE autocomplete, type-checking, and offline imports without a `prompiler` runtime dependency. Generated file pins `COMPILER_PROTOCOL_VERSION` + `spec_hash` in a module-level constant so drift between vendored copy and live spec is detectable.
 
 **Acceptance criteria**
 
@@ -179,6 +182,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - `eval-report.json` emitter (with `spec_hash`, backend, model, timestamp).
 - `eval-report.html` static dashboard (zero JS framework; one vanilla JS file for table sort + filter).
 - `prompiler eval` CLI subcommand.
+- `[plan]` Zero-dep fuzzy fallback for nested-array eval matching: token-set Jaccard similarity at threshold ≥ 0.85, activated only on records that score F1 = 0 under exact match. Catches near-miss extractions (trailing whitespace, punctuation drift, minor reordering) without pulling an embedding model or GPU dependency. Reported as a separate `fuzzy_f1` column alongside `exact_f1` so the signal stays auditable.
 
 **Acceptance criteria**
 

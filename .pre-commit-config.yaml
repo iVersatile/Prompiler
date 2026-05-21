@@ -8,6 +8,7 @@
 #   uv run pre-commit install
 #   uv run pre-commit install --hook-type pre-push
 #   uv run pre-commit install --hook-type commit-msg
+#   uv run pre-commit install --hook-type prepare-commit-msg
 #
 # Manual sweep:
 #   uv run pre-commit run --all-files
@@ -99,3 +100,19 @@ repos:
         language: system
         pass_filenames: true
         stages: [commit-msg]
+
+  # ---------------------------------------------------------------------------
+  # §4 Docs-only Lesson-skip hint — fires on prepare-commit-msg stage.
+  # Appends a hint block when the staged diff touches only *.md files,
+  # pointing the user at the bare `Lesson-skip:` trailer that
+  # `check_lesson_cite.py` accepts for docs-only scopes.
+  # ---------------------------------------------------------------------------
+
+  - repo: local
+    hooks:
+      - id: prepare-commit-msg-docs-hint
+        name: prepare-commit-msg (docs-only Lesson-skip hint)
+        entry: python scripts/prepare_commit_msg.py
+        language: system
+        pass_filenames: true
+        stages: [prepare-commit-msg]
