@@ -16,6 +16,8 @@ from pathlib import Path
 
 from prompiler import __version__
 from prompiler.obs import configure_logging
+from prompiler.spec.linter import lint_spec
+from prompiler.spec.loader import SpecLoadError, load_spec
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -32,21 +34,43 @@ def _build_parser() -> argparse.ArgumentParser:
 
     validate = subparsers.add_parser(
         "validate",
-        help="Validate prompt specs under the given path (P0 stub: existence check only).",
+        help="Validate prompt specs under the given path (load + lint).",
     )
     validate.add_argument(
         "path",
         type=Path,
-        help="Directory of prompt specs to validate.",
+        help="Spec file or directory of prompt specs to validate.",
     )
     return parser
+
+
+def _iter_spec_files(path: Path) -> list[Path]:
+    if path.is_file():
+        return [path]
+    files: list[Path] = []
+    for pattern in ("*.yaml", "*.yml"):
+        files.extend(path.rglob(pattern))
+    return sorted(files)
 
 
 def _cmd_validate(path: Path) -> int:
     if not path.exists():
         sys.stderr.write(f"prompiler validate: path not found: {path}\n")
         return 2
-    return 0
+
+    had_issue = False
+    for spec_path in _iter_spec_files(path):
+        try:
+            spec = load_spec(spec_path)
+        except SpecLoadError as exc:
+            sys.stderr.write(f"{exc}\n")
+            had_issue = True
+            continue
+        for issue in lint_spec(spec):
+            sys.stderr.write(f"{spec_path}:{issue.path} {issue.code}: {issue.message}\n")
+            had_issue = True
+
+    return 1 if had_issue else 0
 
 
 def main(argv: list[str] | None = None) -> int:
