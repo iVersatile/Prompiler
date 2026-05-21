@@ -61,6 +61,13 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - Pre-commit hooks: ruff, black, mypy, `prompiler validate prompts/` (no-op until P1).
 - Logging skeleton (JSON Lines).
 - MCP server skeleton: `127.0.0.1`-bound stub exposing `/healthz` returning `200 {"status":"ok"}`. Full tool registration, resource handlers, and stdio transport deferred to P6 — this skeleton exists so every later phase can smoke-test the integration surface and CI can assert the loopback bind policy from day one.
+- `[plan]` Editor/git scaffolding: `.editorconfig` (charset/EOL/indent), `.gitattributes` (LF normalisation, `uv.lock`/`poetry.lock`/`package-lock.json` flagged `linguist-generated=true`, `cassettes/**` flagged `merge=union`, binary patterns), `.gitignore` (Python build artefacts, venv, lint/type caches, IDE/OS files, `docs/_archive/`, `.env*`, `out/`, `artefacts/`), `.python-version` (`3.11` pin for `uv`/`pyenv` matching `.pre-commit-config.yaml` language pin).
+- `[plan]` Branch model: `main` (release-only) + `dev` (daily progress). All work lands on `dev` via topic branches; release tags (`vMAJOR.MINOR.PATCH`) are cut on `main` after a `dev → main` merge. Document in `docs/RULES.md` §5.
+- `[plan]` GitHub branch protection on `main`: require PR, require linear history, require status checks (`unit`, `integration`, `e2e`, `pre-commit`) to pass, dismiss stale approvals on new commits, restrict force-pushes and deletions.
+- `[plan]` Commit `uv.lock` to the repo: this is an application, not a library; reproducible installs require the lockfile. Documented inline in `.gitignore`.
+- `[plan]` Hook helper scripts under `scripts/`: `scan_secrets.py` (pre-push secret scan), `check_clean_tree.py` (pre-push working-tree-clean enforcement), `check_lesson_cite.py` (commit-msg `fix:`/`perf:` LL-citation gate), `new_lesson.py` (LL-NNN register helper), `local_test.py` (local parity for CI gates).
+- `[plan]` Agent pointer `CLAUDE.md` at repo root referencing `docs/RULES.md` as the single source of truth for project rules; inheriting from global `~/.claude/rules/{common,python}/`.
+- `[plan]` Process docs in `docs/`: `RULES.md` (gates, tagging, phase boundaries), `MANUAL_TESTING.md` (local verification recipes), `LESSONS_LEARNT.md` (seeded LL register with `LL-NNN` IDs for the `fix:`/`perf:` citation gate).
 
 **Acceptance criteria**
 
