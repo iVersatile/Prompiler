@@ -15,10 +15,18 @@ Covers P1.10 (PLAN.md L101 + L108):
   rendered to stderr.
 - Mixed ``.yaml`` / ``.yml`` extensions are both scanned.
 - Walk is recursive across subdirectories.
+
+Covers P0 backfill (``serve`` CLI subcommand):
+- ``main()`` help output lists ``serve``.
+- ``build_server`` binds an ephemeral loopback port and serves ``/healthz``.
+- ``serve --host 0.0.0.0`` without ``--allow-non-loopback`` exits 2.
 """
 
 from __future__ import annotations
 
+import http.client
+import re
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -256,3 +264,54 @@ def test_codegen_load_error_returns_one(tmp_path: Path, capsys: pytest.CaptureFi
     assert rc == 1
     err = capsys.readouterr().err
     assert str(f) in err
+
+
+_SERVE_BIND_RE = re.compile(r"serving on https?://(?P<host>[^:\s]+):(?P<port>\d+)", re.IGNORECASE)
+
+
+@pytest.mark.unit
+def test_serve_help_lists_subcommand(capsys: pytest.CaptureFixture[str]) -> None:
+    rc = main([])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "serve" in out
+
+
+@pytest.mark.unit
+def test_serve_binds_loopback_and_serves_healthz(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from prompiler.mcp.server import HEALTHZ_BODY, HEALTHZ_PATH, build_server
+
+    server = build_server(host="127.0.0.1", port=0)
+    bound_host, bound_port = server.socket.getsockname()[:2]
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        conn = http.client.HTTPConnection(bound_host, bound_port, timeout=2)
+        conn.request("GET", HEALTHZ_PATH)
+        resp = conn.getresponse()
+        body = resp.read()
+        assert resp.status == 200
+        assert body == HEALTHZ_BODY
+        conn.close()
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=2)
+
+    line = f"serving on http://{bound_host}:{bound_port}"
+    match = _SERVE_BIND_RE.match(line)
+    assert match is not None
+    assert match.group("host") == bound_host
+    assert int(match.group("port")) == bound_port
+
+
+@pytest.mark.unit
+def test_serve_rejects_non_loopback_without_opt_in(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    rc = main(["serve", "--host", "0.0.0.0", "--port", "0"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "prompiler serve:" in err

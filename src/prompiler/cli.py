@@ -16,6 +16,7 @@ from pathlib import Path
 
 from prompiler import __version__
 from prompiler.codegen import write as codegen_write
+from prompiler.mcp.server import LOOPBACK_HOST, build_server
 from prompiler.obs import configure_logging
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
@@ -58,6 +59,33 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(".prompiler/compiled"),
         help="Output directory for the generated module (default: .prompiler/compiled).",
+    )
+
+    serve = subparsers.add_parser(
+        "serve",
+        help="Run the MCP skeleton HTTP server (P0 healthz only).",
+    )
+    serve.add_argument(
+        "--transport",
+        choices=["http"],
+        default="http",
+        help="Transport for MCP server (only 'http' supported in P0).",
+    )
+    serve.add_argument(
+        "--host",
+        default=LOOPBACK_HOST,
+        help=f"Bind host (default: {LOOPBACK_HOST}).",
+    )
+    serve.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Bind port (default: 8765; 0 selects an ephemeral port).",
+    )
+    serve.add_argument(
+        "--allow-non-loopback",
+        action="store_true",
+        help="Opt-in to bind a non-loopback host (emits WARN).",
     )
     return parser
 
@@ -108,6 +136,24 @@ def _cmd_codegen(spec_path: Path, out_dir: Path) -> int:
     return 0
 
 
+def _cmd_serve(host: str, port: int, *, allow_non_loopback: bool) -> int:
+    try:
+        server = build_server(host=host, port=port, allow_non_loopback=allow_non_loopback)
+    except ValueError as exc:
+        sys.stderr.write(f"prompiler serve: {exc}\n")
+        return 2
+    bound_host, bound_port = server.socket.getsockname()[:2]
+    sys.stdout.write(f"serving on http://{bound_host}:{bound_port}\n")
+    sys.stdout.flush()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
     parser = _build_parser()
@@ -117,6 +163,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_validate(args.path)
     if args.command == "codegen":
         return _cmd_codegen(args.spec, args.out_dir)
+    if args.command == "serve":
+        return _cmd_serve(args.host, args.port, allow_non_loopback=args.allow_non_loopback)
 
     parser.print_help()
     return 0
