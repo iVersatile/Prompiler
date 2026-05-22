@@ -13,7 +13,9 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-REDACTED_HEADERS: frozenset[str] = frozenset({"authorization", "x-api-key", "cookie", "set-cookie"})
+REDACTED_HEADERS: frozenset[str] = frozenset(
+    {"authorization", "x-api-key", "x-goog-api-key", "cookie", "set-cookie"}
+)
 
 REDACTED_VALUE = "***REDACTED***"
 

@@ -29,14 +29,16 @@ import pytest
 
 from _cassette import CassettePlayer
 from _cassette_transport import make_cassette_transport
-from prompiler.backends import BackendAdapter, ClaudeAdapter, OpenAIAdapter
+from prompiler.backends import BackendAdapter, ClaudeAdapter, GeminiAdapter, OpenAIAdapter
 from prompiler.backends.claude import ANTHROPIC_BASE_URL
+from prompiler.backends.gemini import GEMINI_BASE_URL
 from prompiler.backends.mock import MockAdapter
 from prompiler.backends.openai import OPENAI_BASE_URL
 
 AdapterFactory = Callable[[], BackendAdapter]
 
 CLAUDE_CASSETTE = Path(__file__).parent / "cassettes" / "claude_happy_path.json"
+GEMINI_CASSETTE = Path(__file__).parent / "cassettes" / "gemini_happy_path.json"
 OPENAI_CASSETTE = Path(__file__).parent / "cassettes" / "openai_happy_path.json"
 
 
@@ -45,6 +47,13 @@ def _claude_factory() -> BackendAdapter:
     transport = make_cassette_transport(player)
     client = httpx.AsyncClient(transport=transport, base_url=ANTHROPIC_BASE_URL)
     return ClaudeAdapter(client=client)
+
+
+def _gemini_factory() -> BackendAdapter:
+    player = CassettePlayer.from_json(GEMINI_CASSETTE.read_text())
+    transport = make_cassette_transport(player)
+    client = httpx.AsyncClient(transport=transport, base_url=GEMINI_BASE_URL)
+    return GeminiAdapter(client=client)
 
 
 def _openai_factory() -> BackendAdapter:
@@ -57,6 +66,7 @@ def _openai_factory() -> BackendAdapter:
 ADAPTER_FACTORIES: list[AdapterFactory] = [
     MockAdapter,
     _claude_factory,
+    _gemini_factory,
     _openai_factory,
 ]
 

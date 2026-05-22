@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from prompiler.backends.base import BackendAdapter
 from prompiler.backends.claude import ClaudeAdapter
+from prompiler.backends.gemini import GeminiAdapter
 from prompiler.backends.openai import OpenAIAdapter
 
-__all__ = ["BackendAdapter", "ClaudeAdapter", "OpenAIAdapter"]
+__all__ = ["BackendAdapter", "ClaudeAdapter", "GeminiAdapter", "OpenAIAdapter"]
