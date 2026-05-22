@@ -68,14 +68,14 @@ repos:
     hooks:
       - id: scan-secrets-staged
         name: scan secrets (staged changes)
-        entry: python scripts/scan_secrets.py --staged
+        entry: python3 scripts/scan_secrets.py --staged
         language: system
         pass_filenames: false
         stages: [pre-commit]
 
       - id: scan-secrets-push
         name: scan secrets (push range)
-        entry: python scripts/scan_secrets.py --pre-push
+        entry: python3 scripts/scan_secrets.py --pre-push
         language: system
         pass_filenames: false
         stages: [pre-push]
@@ -89,7 +89,7 @@ repos:
     hooks:
       - id: working-tree-clean
         name: working tree clean (no uncommitted changes)
-        entry: python scripts/check_clean_tree.py
+        entry: python3 scripts/check_clean_tree.py
         language: system
         pass_filenames: false
         stages: [pre-push]
@@ -103,7 +103,7 @@ repos:
     hooks:
       - id: lesson-cite
         name: lesson citation check (fix:/perf:)
-        entry: python scripts/check_lesson_cite.py
+        entry: python3 scripts/check_lesson_cite.py
         language: system
         pass_filenames: true
         stages: [commit-msg]
@@ -119,7 +119,7 @@ repos:
     hooks:
       - id: prepare-commit-msg-docs-hint
         name: prepare-commit-msg (docs-only Lesson-skip hint)
-        entry: python scripts/prepare_commit_msg.py
+        entry: python3 scripts/prepare_commit_msg.py
         language: system
         pass_filenames: true
         stages: [prepare-commit-msg]
