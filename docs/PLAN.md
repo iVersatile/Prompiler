@@ -127,8 +127,8 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
   - [x] `gemini`.
   - [x] `ollama`.
 - [x] Per-adapter `to_tool_schema(json_schema)` projection (handle backend-specific degradation: no `pattern`, no decimals, depth limits).
-- [ ] Credential provider abstraction + `EnvVarProvider` + `GoogleADCProvider`.
-- [ ] Retry policy (transient errors only) with exponential backoff.
+- [x] Credential provider abstraction + `EnvVarProvider` + `GoogleADCProvider`.
+- [ ] Retry policy (transient errors only) with exponential backoff. _(in progress)_
 - [ ] Per-call observability hook (latency, tokens, cost estimate via pricing table).
 - Test infrastructure:
   - [x] Mock adapter for unit tests.
