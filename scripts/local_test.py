@@ -34,7 +34,6 @@ import json
 import os
 import re
 import shutil
-import signal
 import socket
 import subprocess
 import sys
@@ -55,9 +54,7 @@ REQUIRED_SUBCOMMANDS: tuple[str, ...] = ("codegen", "validate", "serve")
 #   "serving on http://127.0.0.1:54321"
 # Both http and https are accepted to keep the regex resilient to future
 # TLS work.
-SERVE_BIND_RE = re.compile(
-    r"serving on https?://[^:\s]+:(?P<port>\d+)", re.IGNORECASE
-)
+SERVE_BIND_RE = re.compile(r"serving on https?://[^:\s]+:(?P<port>\d+)", re.IGNORECASE)
 
 HEALTHZ_TIMEOUT_SECONDS = 10.0
 HEALTHZ_POLL_INTERVAL = 0.2
@@ -96,12 +93,8 @@ def _run(
 def _example_specs() -> list[Path]:
     if not EXAMPLES_DIR.is_dir():
         return []
-    specs = sorted(
-        p for p in EXAMPLES_DIR.glob("*.yaml") if p.is_file()
-    )
-    specs += sorted(
-        p for p in EXAMPLES_DIR.glob("*.yml") if p.is_file()
-    )
+    specs = sorted(p for p in EXAMPLES_DIR.glob("*.yaml") if p.is_file())
+    specs += sorted(p for p in EXAMPLES_DIR.glob("*.yml") if p.is_file())
     return specs
 
 
@@ -186,26 +179,18 @@ def check_codegen_and_determinism() -> CheckResult:
                 continue
             assert mod_a is not None and mod_b is not None
             if mod_a.name != mod_b.name:
-                failures.append(
-                    f"{spec.name}: module names differ "
-                    f"({mod_a.name} vs {mod_b.name})"
-                )
+                failures.append(f"{spec.name}: module names differ ({mod_a.name} vs {mod_b.name})")
                 continue
             a_bytes = mod_a.read_bytes()
             b_bytes = mod_b.read_bytes()
             if a_bytes != b_bytes:
-                failures.append(
-                    f"{spec.name}: modules differ "
-                    f"({len(a_bytes)}B vs {len(b_bytes)}B)"
-                )
+                failures.append(f"{spec.name}: modules differ ({len(a_bytes)}B vs {len(b_bytes)}B)")
     if failures:
         return CheckResult(name, False, "; ".join(failures))
     return CheckResult(name, True, f"{len(specs)} spec(s) codegen-deterministic")
 
 
-def _wait_for_port_line(
-    proc: subprocess.Popen[str], deadline: float
-) -> int | None:
+def _wait_for_port_line(proc: subprocess.Popen[str], deadline: float) -> int | None:
     assert proc.stdout is not None
     while time.monotonic() < deadline:
         line = proc.stdout.readline()
@@ -232,7 +217,7 @@ def _terminate(proc: subprocess.Popen[str]) -> None:
 
 
 def check_mcp_healthz() -> CheckResult:
-    name = "MCP /healthz returns 200 {\"status\":\"ok\"}"
+    name = 'MCP /healthz returns 200 {"status":"ok"}'
     if not SRC_DIR.is_dir():
         return CheckResult(
             name,
@@ -255,7 +240,7 @@ def check_mcp_healthz() -> CheckResult:
     # Force unbuffered Python output so the bind-line lands promptly.
     env.setdefault("PYTHONUNBUFFERED", "1")
     try:
-        proc = subprocess.Popen(  # noqa: S603 — fixed argv, no shell
+        proc = subprocess.Popen(
             cmd,
             cwd=str(REPO_ROOT),
             env=env,
@@ -274,8 +259,7 @@ def check_mcp_healthz() -> CheckResult:
             return CheckResult(
                 name,
                 False,
-                "did not observe bind line within "
-                f"{HEALTHZ_TIMEOUT_SECONDS:.0f}s",
+                f"did not observe bind line within {HEALTHZ_TIMEOUT_SECONDS:.0f}s",
             )
 
         # Connect-test the socket first so we don't hammer the URL while the
@@ -295,7 +279,7 @@ def check_mcp_healthz() -> CheckResult:
             )
 
         try:
-            with urllib.request.urlopen(url, timeout=5.0) as resp:  # noqa: S310
+            with urllib.request.urlopen(url, timeout=5.0) as resp:
                 status = resp.status
                 body = resp.read().decode("utf-8", errors="replace")
         except urllib.error.URLError as exc:
@@ -306,9 +290,7 @@ def check_mcp_healthz() -> CheckResult:
         try:
             parsed = json.loads(body)
         except json.JSONDecodeError as exc:
-            return CheckResult(
-                name, False, f"GET {url} body not JSON ({exc}): {body!r}"
-            )
+            return CheckResult(name, False, f"GET {url} body not JSON ({exc}): {body!r}")
         if parsed != {"status": "ok"}:
             return CheckResult(
                 name, False, f"GET {url} body {parsed!r}, expected {{'status':'ok'}}"
@@ -346,22 +328,18 @@ def _report(results: list[CheckResult]) -> int:
         sys.stderr.write(f"  [{status}] {r.name.ljust(width)}  {r.detail}\n")
     sys.stderr.write("=" * (width + 12) + "\n")
     sys.stderr.write(
-        f"summary: {len(results) - failed - skipped} passed, "
-        f"{failed} failed, {skipped} skipped\n"
+        f"summary: {len(results) - failed - skipped} passed, {failed} failed, {skipped} skipped\n"
     )
     return 1 if failed else 0
 
 
 def main() -> int:
     if _which_uv() is None:
-        sys.stderr.write(
-            "local_test: `uv` not found on PATH. Install uv (>=0.4.0) and retry.\n"
-        )
+        sys.stderr.write("local_test: `uv` not found on PATH. Install uv (>=0.4.0) and retry.\n")
         return 2
     if not REPO_ROOT.joinpath("pyproject.toml").is_file():
         sys.stderr.write(
-            "local_test: pyproject.toml not found at repo root "
-            f"({REPO_ROOT}). Aborting.\n"
+            f"local_test: pyproject.toml not found at repo root ({REPO_ROOT}). Aborting.\n"
         )
         return 2
 

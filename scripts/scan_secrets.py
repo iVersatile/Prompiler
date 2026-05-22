@@ -28,9 +28,9 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 # Each pattern is anchored to a vendor token shape. Keep this list short and
 # precise — broad heuristics (e.g. "secret" substrings) belong in a separate
@@ -39,9 +39,7 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     "anthropic_api_key": re.compile(r"sk-ant-[A-Za-z0-9_\-]{20,}"),
     "openai_api_key": re.compile(r"sk-(?:proj-)?[A-Za-z0-9_\-]{20,}"),
     "aws_access_key_id": re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
-    "private_key_pem": re.compile(
-        r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"
-    ),
+    "private_key_pem": re.compile(r"-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----"),
     "github_token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
     "gitlab_pat": re.compile(r"\bglpat-[A-Za-z0-9_\-]{20,}\b"),
     "google_api_key": re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
@@ -50,9 +48,7 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     # collisions with shorter `ya29.`-prefixed identifiers.
     "google_oauth_token": re.compile(r"\bya29\.[0-9A-Za-z_\-]{100,}\b"),
     # Google service-account JSON key files carry this exact marker.
-    "google_service_account_json": re.compile(
-        r'"type"\s*:\s*"service_account"'
-    ),
+    "google_service_account_json": re.compile(r'"type"\s*:\s*"service_account"'),
 }
 
 # Files that legitimately contain these regex literals. Allowlist is path-exact
@@ -139,9 +135,7 @@ def _scan_added_lines(
                 snippet = content.strip()
                 if len(snippet) > 80:
                     snippet = snippet[:77] + "..."
-                findings.append(
-                    Finding(path=path, line=lineno, pattern=name, snippet=snippet)
-                )
+                findings.append(Finding(path=path, line=lineno, pattern=name, snippet=snippet))
     return findings
 
 
@@ -176,13 +170,9 @@ def _scan_files(paths: Iterable[str]) -> list[Finding]:
 
 
 def _report(findings: list[Finding]) -> None:
-    sys.stderr.write(
-        f"scan_secrets: {len(findings)} potential secret(s) detected:\n"
-    )
+    sys.stderr.write(f"scan_secrets: {len(findings)} potential secret(s) detected:\n")
     for f in findings:
-        sys.stderr.write(
-            f"  {f.path}:{f.line}  [{f.pattern}]  {f.snippet}\n"
-        )
+        sys.stderr.write(f"  {f.path}:{f.line}  [{f.pattern}]  {f.snippet}\n")
     sys.stderr.write(
         "\nRemediation:\n"
         "  1. Remove the secret from the change.\n"

@@ -44,8 +44,7 @@ def main() -> int:
         return 0
 
     sys.stderr.write(
-        "check_clean_tree: working tree is not clean. Commit or stash "
-        "before pushing:\n"
+        "check_clean_tree: working tree is not clean. Commit or stash before pushing:\n"
     )
     for line in dirty:
         sys.stderr.write(f"  {line}\n")

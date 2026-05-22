@@ -69,9 +69,7 @@ def _read_message(path: Path) -> str:
 
 def _strip_comments(message: str) -> str:
     """Drop git's `#`-prefixed scissor/instruction lines from the message."""
-    return "\n".join(
-        line for line in message.splitlines() if not line.startswith("#")
-    )
+    return "\n".join(line for line in message.splitlines() if not line.startswith("#"))
 
 
 def _subject_line(message: str) -> str:
