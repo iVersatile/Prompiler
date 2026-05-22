@@ -15,7 +15,8 @@ conforming to the supplied JSON Schema.
 
 from __future__ import annotations
 
-from typing import Any
+import copy
+from typing import Any, cast
 
 import httpx
 
@@ -23,6 +24,50 @@ GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
 DEFAULT_MODEL = "gemini-1.5-flash"
 EXTRACT_TOOL_NAME = "extract"
 EXTRACT_TOOL_DESCRIPTION = "Return structured data matching the provided JSON Schema."
+
+GEMINI_MAX_DEPTH = 5
+GEMINI_DROP_KEYS = frozenset(
+    {
+        "pattern",
+        "format",
+        "additionalProperties",
+        "$schema",
+        "$id",
+        "$ref",
+        "$defs",
+        "definitions",
+        "multipleOf",
+    }
+)
+_RECURSE_KEYS = frozenset({"properties", "items", "anyOf", "oneOf", "allOf"})
+
+
+def _project_gemini(node: Any, *, depth: int) -> Any:
+    """Strip Gemini-hostile keys and cap nesting at ``GEMINI_MAX_DEPTH``.
+
+    ``depth`` is the 1-indexed level of ``node``. When ``depth`` reaches the
+    cap, structural keys (``properties``/``items``/combinator lists) are
+    dropped rather than recursed into — the resulting tree height stays
+    within Gemini's OpenAPI-3-derived limit.
+    """
+    if not isinstance(node, dict):
+        return copy.deepcopy(node)
+    out: dict[str, Any] = {}
+    at_max = depth >= GEMINI_MAX_DEPTH
+    for key, value in node.items():
+        if key in GEMINI_DROP_KEYS:
+            continue
+        if key in _RECURSE_KEYS and at_max:
+            continue
+        if key == "properties" and isinstance(value, dict):
+            out[key] = {k: _project_gemini(v, depth=depth + 1) for k, v in value.items()}
+        elif key == "items":
+            out[key] = _project_gemini(value, depth=depth + 1)
+        elif key in ("anyOf", "oneOf", "allOf") and isinstance(value, list):
+            out[key] = [_project_gemini(v, depth=depth + 1) for v in value]
+        else:
+            out[key] = copy.deepcopy(value)
+    return out
 
 
 class GeminiAdapter:
@@ -94,6 +139,9 @@ class GeminiAdapter:
         raise RuntimeError(
             f"Gemini response missing functionCall for {EXTRACT_TOOL_NAME!r}: {body!r}"
         )
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return cast("dict[str, Any]", _project_gemini(json_schema, depth=1))
 
     async def aclose(self) -> None:
         if self._owns_client:

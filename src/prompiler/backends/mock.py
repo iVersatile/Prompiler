@@ -24,6 +24,7 @@ equal dict.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 
@@ -42,3 +43,6 @@ class MockAdapter:
     ) -> dict[str, Any]:
         required = json_schema.get("required", [])
         return {key: "mock" for key in required}
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return copy.deepcopy(json_schema)

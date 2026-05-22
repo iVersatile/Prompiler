@@ -17,6 +17,7 @@ in the response is that JSON string, which we ``json.loads`` into a dict.
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any
 
@@ -68,6 +69,9 @@ class OllamaAdapter:
         if not isinstance(parsed, dict):
             raise RuntimeError(f"Ollama message.content did not decode to dict: {content!r}")
         return parsed
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return copy.deepcopy(json_schema)
 
     async def aclose(self) -> None:
         if self._owns_client:

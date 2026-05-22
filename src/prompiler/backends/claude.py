@@ -14,6 +14,7 @@ conforms to the supplied JSON Schema.
 
 from __future__ import annotations
 
+import copy
 from typing import Any
 
 import httpx
@@ -84,6 +85,9 @@ class ClaudeAdapter:
         raise RuntimeError(
             f"Claude response missing tool_use block for {EXTRACT_TOOL_NAME!r}: {body!r}"
         )
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return copy.deepcopy(json_schema)
 
     async def aclose(self) -> None:
         if self._owns_client:

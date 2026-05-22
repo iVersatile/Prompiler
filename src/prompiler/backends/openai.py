@@ -15,6 +15,7 @@ Schema; we parse it into a ``dict[str, Any]``.
 
 from __future__ import annotations
 
+import copy
 import json
 from typing import Any
 
@@ -93,6 +94,9 @@ class OpenAIAdapter:
         raise RuntimeError(
             f"OpenAI response missing tool_calls entry for {EXTRACT_TOOL_NAME!r}: {body!r}"
         )
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return copy.deepcopy(json_schema)
 
     async def aclose(self) -> None:
         if self._owns_client:

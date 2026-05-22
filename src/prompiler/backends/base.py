@@ -44,3 +44,17 @@ class BackendAdapter(Protocol):
         prompt: str,
         json_schema: dict[str, Any],
     ) -> dict[str, Any]: ...
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        """Project ``json_schema`` into the dialect this backend accepts.
+
+        Most backends (Claude, OpenAI, Ollama) accept full JSON Schema and
+        return a deep copy. Gemini's schema dialect is OpenAPI-3-derived and
+        rejects ``pattern``, ``format``, ``additionalProperties``,
+        ``$schema``/``$id``/``$ref``/``$defs``, ``multipleOf``, and nesting
+        deeper than five levels; ``GeminiAdapter`` strips those.
+
+        The returned dict is always a fresh structure — callers may mutate
+        it without aliasing the input.
+        """
+        ...
