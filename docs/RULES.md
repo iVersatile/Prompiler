@@ -14,7 +14,7 @@ Single phase-aware command. Each invocation runs one task end-to-end: implement,
 
 1. Read `docs/PLAN.md`. Identify the current in-progress task — the first unchecked checkbox in the active phase.
 2. Cross-check `docs/LESSONS_LEARNT.md` (see §4) for any tag that matches the task surface area. Apply applicable lessons before writing code.
-3. Implement the task.
+3. Implement the task — for each sub-step, name the verifiable success criterion before writing code, and loop the sub-step until that criterion holds.
 4. Run the local pre-commit gate (§2). If red, stop and report — do not commit.
 5. Pause for user review of the diff. Wait for explicit confirmation ("ship", "go", "lgtm") before step 6.
 6. Run the pre-push gate (§3).
