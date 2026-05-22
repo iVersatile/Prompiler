@@ -1,0 +1,9 @@
+spec_version: 1
+name: email_category
+task: classify
+description: Route inbound support email into one routing bucket.
+labels:
+  - name: billing
+    description: Payments, invoices, refunds.
+  - name: technical
+    description: Product not working.

@@ -1,0 +1,13 @@
+spec_version: 1
+name: invoice
+task: extract
+description: Extract billing details from a single invoice document.
+fields:
+  - name: vendor_name
+    type: string
+    required: true
+    description: Legal name of the issuing vendor.
+  - name: total_amount
+    type: decimal
+    required: true
+    description: Grand total on the invoice in vendor currency.
