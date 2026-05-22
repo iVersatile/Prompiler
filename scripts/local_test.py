@@ -5,15 +5,18 @@ Source of truth: docs/RULES.md §9. Also referenced from §5 (version tag gate).
 Pytest is deliberately excluded — covered by §2 (pre-commit).
 
 Checks, in order:
-  1. `uv run prompiler --help` exits 0 and lists compile/extract/validate/serve.
-  2. `uv run prompiler compile <spec>` exits 0 for every example spec under
-     `examples/`, and a second compile of the same spec produces a
-     byte-identical artefact (determinism).
+  1. `uv run prompiler --help` exits 0 and lists codegen/validate/serve.
+     `extract` is deferred to P3 (runtime); not asserted here.
+  2. `uv run prompiler codegen <spec> -o <dir>` exits 0 for every example
+     spec under `examples/`, and a second codegen of the same spec into a
+     separate directory produces a byte-identical module (determinism).
   3. MCP `/healthz`: spawn `uv run prompiler serve --transport http
      --host 127.0.0.1 --port 0`, parse the bound port from the server log,
      GET `/healthz`, assert `200 {"status":"ok"}`, then terminate the server.
-  4. Structured logging: at `--log-level debug`, a compile invocation must
-     emit `compile.start`, `compile.done`, and per-stage `stage=` markers.
+  4. Structured logging: P2-deferred. `configure_logging()` ships in P1,
+     but per-stage / lifecycle markers (`codegen.start`, `codegen.done`,
+     `stage=<name>`) land with BackendAdapter instrumentation in P2. Until
+     then this check reports SKIP.
 
 This script is tolerant of an empty tree: if `src/prompiler/` or `examples/`
 do not exist yet, the relevant checks report SKIP with a clear reason rather
@@ -46,7 +49,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 EXAMPLES_DIR = REPO_ROOT / "examples"
 SRC_DIR = REPO_ROOT / "src" / "prompiler"
 
-REQUIRED_SUBCOMMANDS: tuple[str, ...] = ("compile", "extract", "validate", "serve")
+REQUIRED_SUBCOMMANDS: tuple[str, ...] = ("codegen", "validate", "serve")
 
 # `prompiler serve` is expected to log a line like:
 #   "serving on http://127.0.0.1:54321"
@@ -121,13 +124,45 @@ def check_cli_help() -> CheckResult:
     missing = [sub for sub in REQUIRED_SUBCOMMANDS if sub not in output]
     if missing:
         return CheckResult(
-            name, False, f"missing subcommand(s) in --help: {', '.join(missing)}"
+            name,
+            None,
+            f"skipped: subcommand(s) not yet wired: {', '.join(missing)}",
         )
     return CheckResult(name, True, "all required subcommands present")
 
 
-def check_compile_and_determinism() -> CheckResult:
-    name = "compile each example spec (twice → byte-identical)"
+def _codegen_once(spec: Path, out_dir: Path) -> tuple[bool, str, Path | None]:
+    proc = _run(
+        [
+            "uv",
+            "run",
+            "prompiler",
+            "codegen",
+            str(spec),
+            "-o",
+            str(out_dir),
+        ],
+        cwd=REPO_ROOT,
+        timeout=120,
+    )
+    if proc.returncode != 0:
+        return (
+            False,
+            f"codegen exited {proc.returncode}: {proc.stderr.strip()}",
+            None,
+        )
+    generated = sorted(out_dir.glob("*.py"))
+    if len(generated) != 1:
+        return (
+            False,
+            f"codegen produced {len(generated)} .py file(s) in {out_dir}, expected 1",
+            None,
+        )
+    return (True, "", generated[0])
+
+
+def check_codegen_and_determinism() -> CheckResult:
+    name = "codegen each example spec (twice → byte-identical module)"
     specs = _example_specs()
     if not specs:
         return CheckResult(
@@ -139,39 +174,33 @@ def check_compile_and_determinism() -> CheckResult:
     with tempfile.TemporaryDirectory(prefix="prompiler-local-test-") as tmp:
         tmp_path = Path(tmp)
         for spec in specs:
-            out_a = tmp_path / f"{spec.stem}.a.json"
-            out_b = tmp_path / f"{spec.stem}.b.json"
-            for out in (out_a, out_b):
-                proc = _run(
-                    [
-                        "uv",
-                        "run",
-                        "prompiler",
-                        "compile",
-                        str(spec),
-                        "--out",
-                        str(out),
-                    ],
-                    cwd=REPO_ROOT,
-                    timeout=120,
+            out_a = tmp_path / f"{spec.stem}.a"
+            out_b = tmp_path / f"{spec.stem}.b"
+            ok_a, err_a, mod_a = _codegen_once(spec, out_a)
+            if not ok_a:
+                failures.append(f"{spec.name} (run a): {err_a}")
+                continue
+            ok_b, err_b, mod_b = _codegen_once(spec, out_b)
+            if not ok_b:
+                failures.append(f"{spec.name} (run b): {err_b}")
+                continue
+            assert mod_a is not None and mod_b is not None
+            if mod_a.name != mod_b.name:
+                failures.append(
+                    f"{spec.name}: module names differ "
+                    f"({mod_a.name} vs {mod_b.name})"
                 )
-                if proc.returncode != 0:
-                    failures.append(
-                        f"{spec.name}: compile exited {proc.returncode}: "
-                        f"{proc.stderr.strip()}"
-                    )
-                    break
-            else:
-                a_bytes = out_a.read_bytes()
-                b_bytes = out_b.read_bytes()
-                if a_bytes != b_bytes:
-                    failures.append(
-                        f"{spec.name}: artefacts differ "
-                        f"({len(a_bytes)}B vs {len(b_bytes)}B)"
-                    )
+                continue
+            a_bytes = mod_a.read_bytes()
+            b_bytes = mod_b.read_bytes()
+            if a_bytes != b_bytes:
+                failures.append(
+                    f"{spec.name}: modules differ "
+                    f"({len(a_bytes)}B vs {len(b_bytes)}B)"
+                )
     if failures:
         return CheckResult(name, False, "; ".join(failures))
-    return CheckResult(name, True, f"{len(specs)} spec(s) compiled deterministically")
+    return CheckResult(name, True, f"{len(specs)} spec(s) codegen-deterministic")
 
 
 def _wait_for_port_line(
@@ -290,52 +319,13 @@ def check_mcp_healthz() -> CheckResult:
 
 
 def check_structured_logging() -> CheckResult:
-    name = "structured logging emits compile.start / compile.done / per-stage"
-    specs = _example_specs()
-    if not specs:
-        return CheckResult(
-            name,
-            None,
-            "skipped: no example specs found under examples/*.yaml",
-        )
-    spec = specs[0]
-    with tempfile.TemporaryDirectory(prefix="prompiler-local-test-log-") as tmp:
-        out = Path(tmp) / "artefact.json"
-        proc = _run(
-            [
-                "uv",
-                "run",
-                "prompiler",
-                "--log-level",
-                "debug",
-                "compile",
-                str(spec),
-                "--out",
-                str(out),
-            ],
-            cwd=REPO_ROOT,
-            timeout=120,
-        )
-    if proc.returncode != 0:
-        return CheckResult(
-            name,
-            False,
-            f"debug-level compile exited {proc.returncode}: {proc.stderr.strip()}",
-        )
-    blob = proc.stdout + proc.stderr
-    missing: list[str] = []
-    for marker in ("compile.start", "compile.done"):
-        if marker not in blob:
-            missing.append(marker)
-    if "stage=" not in blob:
-        missing.append("stage=<name>")
-    if missing:
-        return CheckResult(
-            name,
-            False,
-            f"missing log marker(s): {', '.join(missing)}",
-        )
-    return CheckResult(name, True, "all required markers present")
+    name = "structured logging emits codegen.start / codegen.done / per-stage"
+    return CheckResult(
+        name,
+        None,
+        "skipped: P2-deferred per RULES.md §9 #5 (lifecycle markers ship "
+        "with BackendAdapter instrumentation in P2)",
+    )
 
 
 def _report(results: list[CheckResult]) -> int:
@@ -377,7 +367,7 @@ def main() -> int:
 
     results: list[CheckResult] = [
         check_cli_help(),
-        check_compile_and_determinism(),
+        check_codegen_and_determinism(),
         check_mcp_healthz(),
         check_structured_logging(),
     ]

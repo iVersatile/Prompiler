@@ -199,11 +199,11 @@ Wrapper script: `scripts/local_test.py`.
 
 **What it checks** (pytest deliberately excluded — covered by §2):
 
-1. `uv run prompiler --help` exits 0 and lists `compile`, `extract`, `validate`, `serve`.
-2. `uv run prompiler compile <each example spec>` exits 0 and emits a deterministic artefact.
-3. Determinism: each example spec is compiled twice; the two artefacts must be byte-identical.
+1. `uv run prompiler --help` exits 0 and lists `codegen`, `validate`, `serve`. (`extract` is deferred to P3 — the runtime subcommand — and is not asserted here.)
+2. `uv run prompiler codegen <each example spec> -o <dir>` exits 0 and writes a single deterministic Python module under `<dir>`.
+3. Determinism: each example spec is rendered twice into separate output directories; the two generated modules must be byte-identical.
 4. MCP healthz: `uv run prompiler serve --transport http --host 127.0.0.1 --port 0` runs in the background; the script discovers the bound port from the log line, curls `/healthz`, asserts `200 {"status":"ok"}`, then terminates the server.
-5. Structured logging: at `--log-level debug`, a compile invocation must emit per-stage decision records and `compile.start` / `compile.done` markers. The script asserts these via stdout/stderr capture.
+5. Structured logging: **P2-deferred.** `configure_logging()` ships in P1, but per-stage / lifecycle log markers (`codegen.start`, `codegen.done`, `stage=<name>`) land alongside BackendAdapter instrumentation in P2. The local test gate reports this check as SKIP until then.
 
 The local test gate verifies expected behaviour against committed example specs before a release. It catches regressions that pass unit tests but break end-to-end CLI or MCP behaviour.
 
