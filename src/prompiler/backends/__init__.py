@@ -9,5 +9,6 @@ gemini / ollama in later P2.x tasks) live in sibling modules.
 from __future__ import annotations
 
 from prompiler.backends.base import BackendAdapter
+from prompiler.backends.claude import ClaudeAdapter
 
-__all__ = ["BackendAdapter"]
+__all__ = ["BackendAdapter", "ClaudeAdapter"]

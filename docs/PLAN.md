@@ -122,8 +122,8 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 - [x] `BackendAdapter` protocol.
 - [ ] Adapters:
-  - [ ] **[in-progress]** `claude`.
-  - [ ] `openai`.
+  - [x] `claude`.
+  - [ ] **[in-progress]** `openai`.
   - [ ] `gemini`.
   - [ ] `ollama`.
 - [ ] Per-adapter `to_tool_schema(json_schema)` projection (handle backend-specific degradation: no `pattern`, no decimals, depth limits).

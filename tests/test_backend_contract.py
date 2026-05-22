@@ -21,17 +21,33 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 
-from prompiler.backends import BackendAdapter
+from _cassette import CassettePlayer
+from _cassette_transport import make_cassette_transport
+from prompiler.backends import BackendAdapter, ClaudeAdapter
+from prompiler.backends.claude import ANTHROPIC_BASE_URL
 from prompiler.backends.mock import MockAdapter
 
 AdapterFactory = Callable[[], BackendAdapter]
 
+CLAUDE_CASSETTE = Path(__file__).parent / "cassettes" / "claude_happy_path.json"
+
+
+def _claude_factory() -> BackendAdapter:
+    player = CassettePlayer.from_json(CLAUDE_CASSETTE.read_text())
+    transport = make_cassette_transport(player)
+    client = httpx.AsyncClient(transport=transport, base_url=ANTHROPIC_BASE_URL)
+    return ClaudeAdapter(client=client)
+
+
 ADAPTER_FACTORIES: list[AdapterFactory] = [
     MockAdapter,
+    _claude_factory,
 ]
 
 

@@ -1,0 +1,35 @@
+{
+  "interactions": [
+    {
+      "method": "POST",
+      "request_body_b64": "eyJtb2RlbCI6ICJjbGF1ZGUtMy01LXNvbm5ldC0yMDI0MTAyMiIsICJtYXhfdG9rZW5zIjogNDA5NiwgIm1lc3NhZ2VzIjogW3sicm9sZSI6ICJ1c2VyIiwgImNvbnRlbnQiOiAiQ2xhc3NpZnkgdGhlIGZvbGxvd2luZyB0ZXh0IGludG8gb25lIHJvdXRpbmcgYnVja2V0LiJ9XSwgInRvb2xzIjogW3sibmFtZSI6ICJleHRyYWN0IiwgImRlc2NyaXB0aW9uIjogIlJldHVybiBzdHJ1Y3R1cmVkIGRhdGEgbWF0Y2hpbmcgdGhlIHByb3ZpZGVkIEpTT04gU2NoZW1hLiIsICJpbnB1dF9zY2hlbWEiOiB7InR5cGUiOiAib2JqZWN0IiwgInByb3BlcnRpZXMiOiB7ImxhYmVsIjogeyJ0eXBlIjogInN0cmluZyJ9LCAicmVhc29uIjogeyJ0eXBlIjogInN0cmluZyJ9LCAibm90ZXMiOiB7InR5cGUiOiAic3RyaW5nIn19LCAicmVxdWlyZWQiOiBbImxhYmVsIiwgInJlYXNvbiJdLCAiYWRkaXRpb25hbFByb3BlcnRpZXMiOiBmYWxzZX19XSwgInRvb2xfY2hvaWNlIjogeyJ0eXBlIjogInRvb2wiLCAibmFtZSI6ICJleHRyYWN0In19",
+      "request_headers": {
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "x-api-key": "***REDACTED***"
+      },
+      "response_body_b64": "eyJpZCI6ICJtc2dfdGVzdF9maXh0dXJlIiwgInR5cGUiOiAibWVzc2FnZSIsICJyb2xlIjogImFzc2lzdGFudCIsICJtb2RlbCI6ICJjbGF1ZGUtMy01LXNvbm5ldC0yMDI0MTAyMiIsICJjb250ZW50IjogW3sidHlwZSI6ICJ0b29sX3VzZSIsICJpZCI6ICJ0b29sdV90ZXN0X2ZpeHR1cmUiLCAibmFtZSI6ICJleHRyYWN0IiwgImlucHV0IjogeyJsYWJlbCI6ICJzdXBwb3J0IiwgInJlYXNvbiI6ICJ1c2VyIHJlcXVlc3RzIGh1bWFuIGFzc2lzdGFuY2UifX1dLCAic3RvcF9yZWFzb24iOiAidG9vbF91c2UiLCAic3RvcF9zZXF1ZW5jZSI6IG51bGwsICJ1c2FnZSI6IHsiaW5wdXRfdG9rZW5zIjogMTAwLCAib3V0cHV0X3Rva2VucyI6IDUwfX0=",
+      "response_headers": {
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "url": "https://api.anthropic.com/v1/messages"
+    },
+    {
+      "method": "POST",
+      "request_body_b64": "eyJtb2RlbCI6ICJjbGF1ZGUtMy01LXNvbm5ldC0yMDI0MTAyMiIsICJtYXhfdG9rZW5zIjogNDA5NiwgIm1lc3NhZ2VzIjogW3sicm9sZSI6ICJ1c2VyIiwgImNvbnRlbnQiOiAiQ2xhc3NpZnkgdGhlIGZvbGxvd2luZyB0ZXh0IGludG8gb25lIHJvdXRpbmcgYnVja2V0LiJ9XSwgInRvb2xzIjogW3sibmFtZSI6ICJleHRyYWN0IiwgImRlc2NyaXB0aW9uIjogIlJldHVybiBzdHJ1Y3R1cmVkIGRhdGEgbWF0Y2hpbmcgdGhlIHByb3ZpZGVkIEpTT04gU2NoZW1hLiIsICJpbnB1dF9zY2hlbWEiOiB7InR5cGUiOiAib2JqZWN0IiwgInByb3BlcnRpZXMiOiB7ImxhYmVsIjogeyJ0eXBlIjogInN0cmluZyJ9LCAicmVhc29uIjogeyJ0eXBlIjogInN0cmluZyJ9LCAibm90ZXMiOiB7InR5cGUiOiAic3RyaW5nIn19LCAicmVxdWlyZWQiOiBbImxhYmVsIiwgInJlYXNvbiJdLCAiYWRkaXRpb25hbFByb3BlcnRpZXMiOiBmYWxzZX19XSwgInRvb2xfY2hvaWNlIjogeyJ0eXBlIjogInRvb2wiLCAibmFtZSI6ICJleHRyYWN0In19",
+      "request_headers": {
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        "x-api-key": "***REDACTED***"
+      },
+      "response_body_b64": "eyJpZCI6ICJtc2dfdGVzdF9maXh0dXJlIiwgInR5cGUiOiAibWVzc2FnZSIsICJyb2xlIjogImFzc2lzdGFudCIsICJtb2RlbCI6ICJjbGF1ZGUtMy01LXNvbm5ldC0yMDI0MTAyMiIsICJjb250ZW50IjogW3sidHlwZSI6ICJ0b29sX3VzZSIsICJpZCI6ICJ0b29sdV90ZXN0X2ZpeHR1cmUiLCAibmFtZSI6ICJleHRyYWN0IiwgImlucHV0IjogeyJsYWJlbCI6ICJzdXBwb3J0IiwgInJlYXNvbiI6ICJ1c2VyIHJlcXVlc3RzIGh1bWFuIGFzc2lzdGFuY2UifX1dLCAic3RvcF9yZWFzb24iOiAidG9vbF91c2UiLCAic3RvcF9zZXF1ZW5jZSI6IG51bGwsICJ1c2FnZSI6IHsiaW5wdXRfdG9rZW5zIjogMTAwLCAib3V0cHV0X3Rva2VucyI6IDUwfX0=",
+      "response_headers": {
+        "content-type": "application/json"
+      },
+      "status": 200,
+      "url": "https://api.anthropic.com/v1/messages"
+    }
+  ],
+  "version": 1
+}
