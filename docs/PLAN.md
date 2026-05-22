@@ -274,6 +274,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 - Security review pass: secrets in logs, MCP bind policy, spec-file parsing (YAML unsafe loaders banned).
 - Performance pass: assert all budgets from `PRD.md` §7.1 in CI.
+- Evaluate codegen renderer architecture: decide whether to deepen the shared visitor (introduced P1.x) into a full FieldSpec IR module (~1.5d) or stop at FieldSpec-attached helpers (~<1d) or hold as-is. Trigger criteria: a third renderer arrives (e.g., TypeScript emitter, JSON Schema dialect variant), or a codegen-vs-runtime drift incident is recorded in `docs/LESSONS_LEARNT.md`.
 - Documentation: tutorial (invoice walkthrough), reference (CLI + Python API), architecture overview, contributing guide.
 - Example specs: invoice, email_category, citation, contract_obligation, incident_event.
 - Versioning: `prompiler 0.1.0`, semantic-versioning policy documented.

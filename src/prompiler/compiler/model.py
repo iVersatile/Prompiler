@@ -8,6 +8,9 @@ nested object models compose parent + child name to keep names unique.
 
 Cross-field constraints (PLAN.md L97) compile into ``model_validator(mode="after")``
 hooks attached to a dynamic base class — see ``prompiler.compiler.constraints``.
+
+Recursion shape lives in ``prompiler.compiler.walk`` so static codegen and this
+runtime emitter share traversal/naming and cannot drift.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from typing import Annotated, Any, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from prompiler.compiler.constraints import check_constraints, compile_constraints
+from prompiler.compiler.walk import pascal_case, walk_field
 from prompiler.spec import EntitySpec, FieldSpec
 
 _SCALAR_TYPE_MAP: dict[str, type[Any]] = {
@@ -42,7 +46,7 @@ def synthesize_model(spec: EntitySpec) -> type[BaseModel]:
     allowed_fields = _top_level_field_names(spec)
     compiled = compile_constraints(spec.cross_field_constraints, allowed_fields)
     base = _make_constraint_base(compiled) if compiled else _DefaultBase
-    class_name = _pascal_case(spec.name)
+    class_name = pascal_case(spec.name)
     if spec.task == "extract":
         return _build_extract_model(class_name, spec.fields or [], base)
     return _build_classify_model(class_name, spec, base)
@@ -73,12 +77,13 @@ def _make_constraint_base(
 def _build_extract_model(
     class_name: str, fields: list[FieldSpec], base: type[BaseModel]
 ) -> type[BaseModel]:
+    visitor = _TypeVisitor()
     field_defs: dict[str, tuple[Any, Any]] = {}
     for field in fields:
         if field.name is None:
             continue
-        annotation, default = _field_annotation_and_default(field, class_name)
-        field_defs[field.name] = (annotation, default)
+        annotation = walk_field(field, class_name, visitor)
+        field_defs[field.name] = _annotation_with_default(annotation, field.required)
     return _make_model(class_name, field_defs, base)
 
 
@@ -95,29 +100,41 @@ def _build_classify_model(
     return _make_model(class_name, field_defs, base)
 
 
-def _field_annotation_and_default(field: FieldSpec, parent_name: str) -> tuple[Any, Any]:
-    annotation = _annotation_for(field, parent_name)
-    if not field.required:
-        return annotation | None, None
-    return annotation, ...
+def _annotation_with_default(annotation: Any, required: bool) -> tuple[Any, Any]:
+    if required:
+        return annotation, ...
+    return annotation | None, None
 
 
-def _annotation_for(field: FieldSpec, parent_name: str) -> Any:
-    t = field.type
-    if t in _SCALAR_TYPE_MAP:
-        base = _SCALAR_TYPE_MAP[t]
+class _TypeVisitor:
+    """Materialise Pydantic annotations. Nested object sub-models built eagerly
+    via ``create_model`` inside ``visit_object`` — walker's bottom-up recursion
+    means children are constructed before parent embeds them."""
+
+    def visit_scalar(self, field: FieldSpec, parent: str) -> Any:
+        base = _SCALAR_TYPE_MAP[field.type]
         constraint = _scalar_constraint(field)
         return Annotated[base, constraint] if constraint is not None else base
-    if t == "enum":
+
+    def visit_enum(self, field: FieldSpec, parent: str) -> Any:
         return cast(Any, Literal[tuple(field.values or ())])
-    if t == "array":
-        assert field.item is not None  # guaranteed by FieldSpec validator
-        inner: Any = _annotation_for(field.item, parent_name)
+
+    def visit_array(self, field: FieldSpec, parent: str, inner: Any) -> Any:
         return cast(Any, list[inner])
-    if t == "object":
-        sub_name = parent_name + _pascal_case(field.name or "Item")
-        return _build_extract_model(sub_name, field.fields or [], _DefaultBase)
-    raise ValueError(f"unsupported field type: {t!r}")
+
+    def visit_object(
+        self,
+        field: FieldSpec,
+        parent: str,
+        sub_name: str,
+        children: list[tuple[FieldSpec, Any]],
+    ) -> Any:
+        field_defs: dict[str, tuple[Any, Any]] = {}
+        for child, annotation in children:
+            if child.name is None:
+                continue
+            field_defs[child.name] = _annotation_with_default(annotation, child.required)
+        return _make_model(sub_name, field_defs, _DefaultBase)
 
 
 def _scalar_constraint(field: FieldSpec) -> Any | None:
@@ -143,7 +160,3 @@ def _make_model(
         __base__=base,
         **field_defs,
     )
-
-
-def _pascal_case(name: str) -> str:
-    return "".join(part[:1].upper() + part[1:] for part in name.split("_") if part)
