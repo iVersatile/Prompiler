@@ -45,6 +45,14 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     "github_token": re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b"),
     "gitlab_pat": re.compile(r"\bglpat-[A-Za-z0-9_\-]{20,}\b"),
     "google_api_key": re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),
+    # Google OAuth 2.0 access tokens — opaque `ya29.<base64ish>` strings,
+    # typically 200+ chars. Threshold deliberately conservative to avoid
+    # collisions with shorter `ya29.`-prefixed identifiers.
+    "google_oauth_token": re.compile(r"\bya29\.[0-9A-Za-z_\-]{100,}\b"),
+    # Google service-account JSON key files carry this exact marker.
+    "google_service_account_json": re.compile(
+        r'"type"\s*:\s*"service_account"'
+    ),
 }
 
 # Files that legitimately contain these regex literals. Allowlist is path-exact
