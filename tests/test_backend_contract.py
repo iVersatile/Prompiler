@@ -29,16 +29,24 @@ import pytest
 
 from _cassette import CassettePlayer
 from _cassette_transport import make_cassette_transport
-from prompiler.backends import BackendAdapter, ClaudeAdapter, GeminiAdapter, OpenAIAdapter
+from prompiler.backends import (
+    BackendAdapter,
+    ClaudeAdapter,
+    GeminiAdapter,
+    OllamaAdapter,
+    OpenAIAdapter,
+)
 from prompiler.backends.claude import ANTHROPIC_BASE_URL
 from prompiler.backends.gemini import GEMINI_BASE_URL
 from prompiler.backends.mock import MockAdapter
+from prompiler.backends.ollama import OLLAMA_BASE_URL
 from prompiler.backends.openai import OPENAI_BASE_URL
 
 AdapterFactory = Callable[[], BackendAdapter]
 
 CLAUDE_CASSETTE = Path(__file__).parent / "cassettes" / "claude_happy_path.json"
 GEMINI_CASSETTE = Path(__file__).parent / "cassettes" / "gemini_happy_path.json"
+OLLAMA_CASSETTE = Path(__file__).parent / "cassettes" / "ollama_happy_path.json"
 OPENAI_CASSETTE = Path(__file__).parent / "cassettes" / "openai_happy_path.json"
 
 
@@ -63,11 +71,19 @@ def _openai_factory() -> BackendAdapter:
     return OpenAIAdapter(client=client)
 
 
+def _ollama_factory() -> BackendAdapter:
+    player = CassettePlayer.from_json(OLLAMA_CASSETTE.read_text())
+    transport = make_cassette_transport(player)
+    client = httpx.AsyncClient(transport=transport, base_url=OLLAMA_BASE_URL)
+    return OllamaAdapter(client=client)
+
+
 ADAPTER_FACTORIES: list[AdapterFactory] = [
     MockAdapter,
     _claude_factory,
     _gemini_factory,
     _openai_factory,
+    _ollama_factory,
 ]
 
 
