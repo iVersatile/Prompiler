@@ -29,13 +29,15 @@ import pytest
 
 from _cassette import CassettePlayer
 from _cassette_transport import make_cassette_transport
-from prompiler.backends import BackendAdapter, ClaudeAdapter
+from prompiler.backends import BackendAdapter, ClaudeAdapter, OpenAIAdapter
 from prompiler.backends.claude import ANTHROPIC_BASE_URL
 from prompiler.backends.mock import MockAdapter
+from prompiler.backends.openai import OPENAI_BASE_URL
 
 AdapterFactory = Callable[[], BackendAdapter]
 
 CLAUDE_CASSETTE = Path(__file__).parent / "cassettes" / "claude_happy_path.json"
+OPENAI_CASSETTE = Path(__file__).parent / "cassettes" / "openai_happy_path.json"
 
 
 def _claude_factory() -> BackendAdapter:
@@ -45,9 +47,17 @@ def _claude_factory() -> BackendAdapter:
     return ClaudeAdapter(client=client)
 
 
+def _openai_factory() -> BackendAdapter:
+    player = CassettePlayer.from_json(OPENAI_CASSETTE.read_text())
+    transport = make_cassette_transport(player)
+    client = httpx.AsyncClient(transport=transport, base_url=OPENAI_BASE_URL)
+    return OpenAIAdapter(client=client)
+
+
 ADAPTER_FACTORIES: list[AdapterFactory] = [
     MockAdapter,
     _claude_factory,
+    _openai_factory,
 ]
 
 
