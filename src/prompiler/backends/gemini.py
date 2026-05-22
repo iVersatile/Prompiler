@@ -21,6 +21,7 @@ from typing import Any, cast
 import httpx
 
 from prompiler.backends.credentials import CredentialError, CredentialProvider
+from prompiler.backends.retry import RetryPolicy, with_retry
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
 DEFAULT_MODEL = "gemini-1.5-flash"
@@ -80,8 +81,10 @@ class GeminiAdapter:
         client: httpx.AsyncClient | None = None,
         credentials: CredentialProvider | None = None,
         model: str = DEFAULT_MODEL,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._model = model
+        self._retry_policy = retry_policy or RetryPolicy()
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -132,8 +135,13 @@ class GeminiAdapter:
             },
         }
         path = f"/v1beta/models/{self._model}:generateContent"
-        response = await self._client.post(path, json=payload)
-        response.raise_for_status()
+
+        async def _do_post() -> httpx.Response:
+            response = await self._client.post(path, json=payload)
+            response.raise_for_status()
+            return response
+
+        response = await with_retry(_do_post, policy=self._retry_policy)
         body: dict[str, Any] = response.json()
         for candidate in body.get("candidates", []):
             content = candidate.get("content") or {}

@@ -23,6 +23,8 @@ from typing import Any
 
 import httpx
 
+from prompiler.backends.retry import RetryPolicy, with_retry
+
 OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.1"
 
@@ -34,8 +36,10 @@ class OllamaAdapter:
         base_url: str = OLLAMA_BASE_URL,
         client: httpx.AsyncClient | None = None,
         model: str = DEFAULT_MODEL,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._model = model
+        self._retry_policy = retry_policy or RetryPolicy()
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -58,8 +62,13 @@ class OllamaAdapter:
             "format": json_schema,
             "stream": False,
         }
-        response = await self._client.post("/api/chat", json=payload)
-        response.raise_for_status()
+
+        async def _do_post() -> httpx.Response:
+            response = await self._client.post("/api/chat", json=payload)
+            response.raise_for_status()
+            return response
+
+        response = await with_retry(_do_post, policy=self._retry_policy)
         body: dict[str, Any] = response.json()
         message = body.get("message") or {}
         content = message.get("content")

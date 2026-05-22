@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 from prompiler.backends.credentials import CredentialError, CredentialProvider
+from prompiler.backends.retry import RetryPolicy, with_retry
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -38,9 +39,11 @@ class ClaudeAdapter:
         credentials: CredentialProvider | None = None,
         model: str = DEFAULT_MODEL,
         max_tokens: int = DEFAULT_MAX_TOKENS,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._model = model
         self._max_tokens = max_tokens
+        self._retry_policy = retry_policy or RetryPolicy()
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -84,8 +87,13 @@ class ClaudeAdapter:
             ],
             "tool_choice": {"type": "tool", "name": EXTRACT_TOOL_NAME},
         }
-        response = await self._client.post("/v1/messages", json=payload)
-        response.raise_for_status()
+
+        async def _do_post() -> httpx.Response:
+            response = await self._client.post("/v1/messages", json=payload)
+            response.raise_for_status()
+            return response
+
+        response = await with_retry(_do_post, policy=self._retry_policy)
         body: dict[str, Any] = response.json()
         for block in body.get("content", []):
             if block.get("type") == "tool_use" and block.get("name") == EXTRACT_TOOL_NAME:

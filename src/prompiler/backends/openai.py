@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 
 from prompiler.backends.credentials import CredentialError, CredentialProvider
+from prompiler.backends.retry import RetryPolicy, with_retry
 
 OPENAI_BASE_URL = "https://api.openai.com"
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -37,8 +38,10 @@ class OpenAIAdapter:
         client: httpx.AsyncClient | None = None,
         credentials: CredentialProvider | None = None,
         model: str = DEFAULT_MODEL,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self._model = model
+        self._retry_policy = retry_policy or RetryPolicy()
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -86,8 +89,13 @@ class OpenAIAdapter:
                 "function": {"name": EXTRACT_TOOL_NAME},
             },
         }
-        response = await self._client.post("/v1/chat/completions", json=payload)
-        response.raise_for_status()
+
+        async def _do_post() -> httpx.Response:
+            response = await self._client.post("/v1/chat/completions", json=payload)
+            response.raise_for_status()
+            return response
+
+        response = await with_retry(_do_post, policy=self._retry_policy)
         body: dict[str, Any] = response.json()
         for choice in body.get("choices", []):
             message = choice.get("message") or {}

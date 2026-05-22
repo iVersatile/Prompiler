@@ -20,6 +20,7 @@ from prompiler.backends.credentials import (
 from prompiler.backends.gemini import GeminiAdapter
 from prompiler.backends.ollama import OllamaAdapter
 from prompiler.backends.openai import OpenAIAdapter
+from prompiler.backends.retry import RetryPolicy, with_retry
 
 __all__ = [
     "BackendAdapter",
@@ -32,4 +33,6 @@ __all__ = [
     "GoogleADCProvider",
     "OllamaAdapter",
     "OpenAIAdapter",
+    "RetryPolicy",
+    "with_retry",
 ]
