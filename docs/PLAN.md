@@ -121,15 +121,19 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 **Tasks**
 
 - [x] `BackendAdapter` protocol.
-- [ ] **[in-progress]** Adapters: `claude`, `openai`, `gemini`, `ollama`.
-- Per-adapter `to_tool_schema(json_schema)` projection (handle backend-specific degradation: no `pattern`, no decimals, depth limits).
-- Credential provider abstraction + `EnvVarProvider` + `GoogleADCProvider`.
-- Retry policy (transient errors only) with exponential backoff.
-- Per-call observability hook (latency, tokens, cost estimate via pricing table).
+- [ ] Adapters:
+  - [ ] **[in-progress]** `claude`.
+  - [ ] `openai`.
+  - [ ] `gemini`.
+  - [ ] `ollama`.
+- [ ] Per-adapter `to_tool_schema(json_schema)` projection (handle backend-specific degradation: no `pattern`, no decimals, depth limits).
+- [ ] Credential provider abstraction + `EnvVarProvider` + `GoogleADCProvider`.
+- [ ] Retry policy (transient errors only) with exponential backoff.
+- [ ] Per-call observability hook (latency, tokens, cost estimate via pricing table).
 - Test infrastructure:
-  - Mock adapter for unit tests.
-  - Cassette recorder/player for paid backends (VCR-style).
-  - Ollama sidecar integration test running on every PR.
+  - [x] Mock adapter for unit tests.
+  - [x] Cassette recorder/player for paid backends (VCR-style).
+  - [ ] Ollama sidecar integration test running on every PR.
 
 **Acceptance criteria**
 
