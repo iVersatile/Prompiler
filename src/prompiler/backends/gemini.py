@@ -20,6 +20,8 @@ from typing import Any, cast
 
 import httpx
 
+from prompiler.backends.credentials import CredentialError, CredentialProvider
+
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
 DEFAULT_MODEL = "gemini-1.5-flash"
 EXTRACT_TOOL_NAME = "extract"
@@ -76,24 +78,32 @@ class GeminiAdapter:
         *,
         api_key: str | None = None,
         client: httpx.AsyncClient | None = None,
+        credentials: CredentialProvider | None = None,
         model: str = DEFAULT_MODEL,
     ) -> None:
-        if api_key is None and client is None:
-            raise ValueError("GeminiAdapter requires api_key or client")
         self._model = model
         if client is not None:
             self._client = client
             self._owns_client = False
+            return
+        auth_headers: dict[str, str]
+        if api_key is not None:
+            auth_headers = {"x-goog-api-key": api_key}
+        elif credentials is not None:
+            auth_headers = dict(credentials.resolve("gemini").headers)
         else:
-            assert api_key is not None
-            self._client = httpx.AsyncClient(
-                base_url=GEMINI_BASE_URL,
-                headers={
-                    "x-goog-api-key": api_key,
-                    "content-type": "application/json",
-                },
+            raise CredentialError(
+                "GeminiAdapter requires api_key, client, or credentials; "
+                "see docs/MANUAL_TESTING.md §3 (credentials)"
             )
-            self._owns_client = True
+        self._client = httpx.AsyncClient(
+            base_url=GEMINI_BASE_URL,
+            headers={
+                **auth_headers,
+                "content-type": "application/json",
+            },
+        )
+        self._owns_client = True
 
     async def extract(
         self,

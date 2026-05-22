@@ -10,8 +10,26 @@ from __future__ import annotations
 
 from prompiler.backends.base import BackendAdapter
 from prompiler.backends.claude import ClaudeAdapter
+from prompiler.backends.credentials import (
+    Credential,
+    CredentialError,
+    CredentialProvider,
+    EnvVarProvider,
+    GoogleADCProvider,
+)
 from prompiler.backends.gemini import GeminiAdapter
 from prompiler.backends.ollama import OllamaAdapter
 from prompiler.backends.openai import OpenAIAdapter
 
-__all__ = ["BackendAdapter", "ClaudeAdapter", "GeminiAdapter", "OllamaAdapter", "OpenAIAdapter"]
+__all__ = [
+    "BackendAdapter",
+    "ClaudeAdapter",
+    "Credential",
+    "CredentialError",
+    "CredentialProvider",
+    "EnvVarProvider",
+    "GeminiAdapter",
+    "GoogleADCProvider",
+    "OllamaAdapter",
+    "OpenAIAdapter",
+]

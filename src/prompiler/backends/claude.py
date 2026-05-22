@@ -19,6 +19,8 @@ from typing import Any
 
 import httpx
 
+from prompiler.backends.credentials import CredentialError, CredentialProvider
+
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
@@ -33,27 +35,35 @@ class ClaudeAdapter:
         *,
         api_key: str | None = None,
         client: httpx.AsyncClient | None = None,
+        credentials: CredentialProvider | None = None,
         model: str = DEFAULT_MODEL,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ) -> None:
-        if api_key is None and client is None:
-            raise ValueError("ClaudeAdapter requires api_key or client")
         self._model = model
         self._max_tokens = max_tokens
         if client is not None:
             self._client = client
             self._owns_client = False
+            return
+        auth_headers: dict[str, str]
+        if api_key is not None:
+            auth_headers = {"x-api-key": api_key}
+        elif credentials is not None:
+            auth_headers = dict(credentials.resolve("claude").headers)
         else:
-            assert api_key is not None
-            self._client = httpx.AsyncClient(
-                base_url=ANTHROPIC_BASE_URL,
-                headers={
-                    "x-api-key": api_key,
-                    "anthropic-version": ANTHROPIC_VERSION,
-                    "content-type": "application/json",
-                },
+            raise CredentialError(
+                "ClaudeAdapter requires api_key, client, or credentials; "
+                "see docs/MANUAL_TESTING.md §3 (credentials)"
             )
-            self._owns_client = True
+        self._client = httpx.AsyncClient(
+            base_url=ANTHROPIC_BASE_URL,
+            headers={
+                **auth_headers,
+                "anthropic-version": ANTHROPIC_VERSION,
+                "content-type": "application/json",
+            },
+        )
+        self._owns_client = True
 
     async def extract(
         self,

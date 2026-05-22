@@ -25,6 +25,9 @@ dependencies = [
     "httpx>=0.27",
 ]
 
+[project.optional-dependencies]
+adc = ["google-auth>=2.0"]
+
 [project.scripts]
 prompiler = "prompiler.cli:main"
 
