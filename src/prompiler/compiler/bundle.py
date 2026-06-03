@@ -36,12 +36,18 @@ class ArtefactBundle:
 
     Frozen dataclass — fields are immutable. ``tool_schema_per_backend``
     is a ``MappingProxyType`` so the mapping itself rejects mutation.
+
+    ``max_input_tokens`` carries the spec's doc-size guardrail
+    (architecture.md L267) into the run-time layer. The orchestrator
+    enforces the cap before dispatching to the adapter; ``None`` disables
+    the check.
     """
 
     prompt: str
     pydantic_cls: type[BaseModel]
     tool_schema_per_backend: MappingProxyType[str, dict[str, Any]]
     spec_hash: str
+    max_input_tokens: int | None = None
 
 
 def compile_spec(spec: EntitySpec) -> ArtefactBundle:
@@ -58,4 +64,5 @@ def compile_spec(spec: EntitySpec) -> ArtefactBundle:
         pydantic_cls=pydantic_cls,
         tool_schema_per_backend=_EMPTY_BACKEND_SCHEMAS,
         spec_hash=digest,
+        max_input_tokens=spec.max_input_tokens,
     )

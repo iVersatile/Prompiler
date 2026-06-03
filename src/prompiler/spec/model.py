@@ -104,6 +104,7 @@ class EntitySpec(BaseModel):
     labels: list[Label] | None = None
     cross_field_constraints: list[Constraint] = Field(default_factory=list)
     allow_multi_label: bool = False
+    max_input_tokens: int | None = Field(default=None, ge=1)
 
     @model_validator(mode="after")
     def _check_task_payload(self) -> EntitySpec:
