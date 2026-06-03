@@ -111,6 +111,10 @@ class _ScriptedAdapter:
         timeout: float | None = None,
     ) -> dict[str, Any]:
         self.calls += 1
+        assert self._script, (
+            f"_ScriptedAdapter exhausted on call {self.calls}; "
+            "test scripted fewer responses than orchestrator requested"
+        )
         head = self._script.pop(0)
         if isinstance(head, Exception):
             raise head

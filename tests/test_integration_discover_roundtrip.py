@@ -20,6 +20,7 @@ zero API key.
 from __future__ import annotations
 
 import asyncio
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Final, TypedDict
 
@@ -69,12 +70,12 @@ _RECEIPT_PROPS: Final[frozenset[str]] = frozenset({"merchant", "amount"})
 
 _INVOICE_PAYLOAD: Final[dict[str, Any]] = {
     "vendor": "Acme Corp",
-    "total": "1234.56",
+    "total": Decimal("1234.56"),
 }
 
 _RECEIPT_PAYLOAD: Final[dict[str, Any]] = {
     "merchant": "Corner Store",
-    "amount": "9.99",
+    "amount": Decimal("9.99"),
 }
 
 
@@ -112,7 +113,7 @@ def _write_spec(dir_path: Path, filename: str, spec: _SpecDict) -> None:
 
 
 def _dump(model: BaseModel) -> dict[str, Any]:
-    return model.model_dump(mode="json")
+    return model.model_dump()
 
 
 @pytest.mark.integration
