@@ -129,11 +129,11 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] Per-adapter `to_tool_schema(json_schema)` projection (handle backend-specific degradation: no `pattern`, no decimals, depth limits).
 - [x] Credential provider abstraction + `EnvVarProvider` + `GoogleADCProvider`.
 - [x] Retry policy (transient errors only) with exponential backoff.
-- [ ] Per-call observability hook (latency, tokens, cost estimate via pricing table). _(in progress)_
+- [x] Per-call observability hook (latency, tokens, cost estimate via pricing table).
 - Test infrastructure:
   - [x] Mock adapter for unit tests.
   - [x] Cassette recorder/player for paid backends (VCR-style).
-  - [ ] Ollama sidecar integration test running on every PR.
+  - [ ] Ollama sidecar integration test running on every PR. _(in progress)_
 
 **Acceptance criteria**
 
