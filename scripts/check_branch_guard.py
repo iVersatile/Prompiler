@@ -42,9 +42,7 @@ def main() -> int:
         return 2
 
     if result.returncode != 0:
-        sys.stderr.write(
-            "check_branch_guard: `git rev-parse --abbrev-ref HEAD` failed.\n"
-        )
+        sys.stderr.write("check_branch_guard: `git rev-parse --abbrev-ref HEAD` failed.\n")
         sys.stderr.write(result.stderr)
         return 2
 
@@ -52,7 +50,7 @@ def main() -> int:
     if branch not in _BLOCKED_BRANCHES:
         return 0
 
-    if os.environ.get(_ESCAPE_HATCH_ENV, "").strip():
+    if os.environ.get(_ESCAPE_HATCH_ENV, "").strip() == "1":
         sys.stderr.write(
             f"check_branch_guard: committing on `{branch}` because "
             f"{_ESCAPE_HATCH_ENV} is set. Proceed with caution.\n"

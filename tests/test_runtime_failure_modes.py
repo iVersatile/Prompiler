@@ -63,8 +63,8 @@ def _register() -> Registry:
 
 
 class _ScriptedAdapter:
-    def __init__(self, script: list[dict[str, Any] | Exception]) -> None:
-        self._script: list[dict[str, Any] | Exception] = list(script)
+    def __init__(self, script: list[dict[str, Any] | AdapterError | asyncio.TimeoutError]) -> None:
+        self._script: list[dict[str, Any] | AdapterError | asyncio.TimeoutError] = list(script)
         self.calls: int = 0
 
     async def extract(
@@ -76,7 +76,7 @@ class _ScriptedAdapter:
     ) -> dict[str, Any]:
         self.calls += 1
         head = self._script.pop(0)
-        if isinstance(head, Exception):
+        if isinstance(head, (AdapterError, asyncio.TimeoutError)):
             raise head
         return head
 
