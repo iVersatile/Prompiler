@@ -47,7 +47,7 @@ async def post_with_retry(
         response = await client.post(path, **post_kwargs)
         if response.status_code >= 400:
             raise httpx.HTTPStatusError(
-                f"{vendor_label} {response.status_code}: {response.text}",
+                f"{vendor_label} {response.status_code}: {truncate_for_error(response.text)}",
                 request=response.request,
                 response=response,
             )
