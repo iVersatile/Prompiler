@@ -170,9 +170,9 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 **Definition of done**
 
-- ≥ 85% coverage on `runtime/` module.
-- Stress test: 100 concurrent batch calls do not exceed memory budget (asserted with `tracemalloc`).
-- Failure-mode tests cover: missing field, type mismatch, refusal, timeout, rate limit.
+- [x] ≥ 85% coverage on `runtime/` module.
+- [x] Stress test: 100 concurrent batch calls do not exceed memory budget (asserted with `tracemalloc`).
+- [x] Failure-mode tests cover: missing field, type mismatch, refusal, timeout, rate limit.
 
 ---
 
