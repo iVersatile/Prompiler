@@ -97,7 +97,7 @@ def test_default_pricing_table_covers_shipped_backends() -> None:
     expected_keys = {
         ("claude", "claude-3-5-sonnet-20241022"),
         ("openai", "gpt-4o-mini"),
-        ("gemini", "gemini-1.5-flash"),
+        ("gemini", "gemini-2.5-flash"),
         ("ollama", "llama3.1"),
     }
     assert expected_keys.issubset(set(DEFAULT_PRICING_TABLE.rates.keys()))
@@ -311,10 +311,10 @@ def test_gemini_adapter_emits_metrics_on_success() -> None:
     assert len(hook.calls) == 1
     m = hook.calls[0]
     assert m.backend == "gemini"
-    assert m.model == "gemini-1.5-flash"
+    assert m.model == "gemini-2.5-flash"
     assert m.prompt_tokens == 60
     assert m.completion_tokens == 30
-    expected_cost = 60 * 0.075 / 1_000_000 + 30 * 0.30 / 1_000_000
+    expected_cost = 60 * 0.30 / 1_000_000 + 30 * 2.50 / 1_000_000
     assert m.cost_usd == pytest.approx(expected_cost)
 
 
