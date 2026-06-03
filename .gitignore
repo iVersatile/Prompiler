@@ -57,6 +57,10 @@ coverage.xml
 .project
 .pydevproject
 
+# Claude Code per-developer config
+.claude/
+.scratch/
+
 # OS
 .DS_Store
 .DS_Store?

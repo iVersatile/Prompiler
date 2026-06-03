@@ -171,7 +171,7 @@ def test_artefact_bundle_pydantic_cls_field_frozen() -> None:
 def test_artefact_bundle_tool_schema_field_frozen() -> None:
     bundle = compile(_extract_spec())
     with pytest.raises(dataclasses.FrozenInstanceError):
-        bundle.tool_schema_per_backend = {}  # type: ignore[misc]
+        bundle.tool_schema_per_backend = {}  # type: ignore[assignment,misc]
 
 
 @pytest.mark.unit

@@ -1,0 +1,91 @@
+# prompiler — Nightly Live-Smoke
+#
+# Hits real vendor APIs (Anthropic, OpenAI, Google) and a real Ollama sidecar
+# to catch silent backend breakage that the hermetic unit/integration tiers
+# cannot detect: model deprecation, schema-projection drift, auth-header
+# changes, pricing-table reshuffles, etc.
+#
+# Triggered only on a nightly cron + manual dispatch — never on PRs or pushes
+# — so vendor secrets stay scoped to a single workflow and PR runs stay free.
+# Vendor tests self-skip when their secret is absent (see
+# tests/test_live_smoke.py::_require_env), so a missing secret degrades to a
+# yellow skip rather than a red failure.
+name: nightly-live-smoke
+
+on:
+  schedule:
+    # 06:00 UTC daily — after typical vendor maintenance windows, well before
+    # EU working hours so a green/red signal is visible by morning standup.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-live-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.4.30"
+
+jobs:
+  live-smoke:
+    name: live-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      ollama:
+        image: ollama/ollama:0.5.4
+        ports:
+          - 11434:11434
+    env:
+      OLLAMA_LIVE_SMOKE_BASE_URL: http://localhost:11434
+      OLLAMA_LIVE_SMOKE_MODEL: llama3.2:1b
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Wait for Ollama sidecar to accept HTTP
+        # The ollama/ollama image has no curl, so we probe from the runner via
+        # the published port mapping. Bail out after ~60s if the daemon never
+        # comes up — a stuck sidecar is a CI failure, not a silent skip.
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail --max-time 2 "${OLLAMA_LIVE_SMOKE_BASE_URL}/api/tags" >/dev/null; then
+              echo "Ollama ready after ${attempt} attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Ollama sidecar never became reachable at ${OLLAMA_LIVE_SMOKE_BASE_URL}." >&2
+          exit 1
+
+      - name: Pull live-smoke model (${{ env.OLLAMA_LIVE_SMOKE_MODEL }})
+        # /api/pull streams progress when stream=true; we want a single blocking
+        # call so the next step can assume the model is resident.
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${OLLAMA_LIVE_SMOKE_BASE_URL}/api/pull" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"${OLLAMA_LIVE_SMOKE_MODEL}\",\"stream\":false}"
+
+      - name: Run live-smoke tier
+        run: uv run pytest -m live_smoke -q

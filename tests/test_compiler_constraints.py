@@ -119,8 +119,8 @@ def test_spec_without_constraints_validates_normally() -> None:
     )
     model = synthesize_model(spec)
     instance = model(a=1, b=2)
-    assert instance.a == 1
-    assert instance.b == 2
+    assert instance.a == 1  # type: ignore[attr-defined]
+    assert instance.b == 2  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit
@@ -290,8 +290,8 @@ def test_severity_warn_emits_warning_but_validates() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         instance = model(a=1, b=2)
-    assert instance.a == 1
-    assert instance.b == 2
+    assert instance.a == 1  # type: ignore[attr-defined]
+    assert instance.b == 2  # type: ignore[attr-defined]
     assert any("a == b" in str(w.message) for w in caught)
 
 

@@ -65,9 +65,7 @@ def _append(content: str, entry: str) -> str:
 
 
 def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(
-        description="Scaffold a new LESSONS_LEARNT entry."
-    )
+    parser = argparse.ArgumentParser(description="Scaffold a new LESSONS_LEARNT entry.")
     parser.add_argument("--title", required=True, help="Short title for the lesson.")
     parser.add_argument(
         "--tags",

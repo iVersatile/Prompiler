@@ -6,9 +6,11 @@
 #   - integration
 #   - e2e
 #
-# Test tiers mirror docs/MANUAL_TESTING.md §§2–4. P0 ships skeleton only —
-# integration/e2e jobs treat pytest's exit code 5 ("no tests collected") as
-# success so they stay green while later phases populate the markers.
+# Test tiers mirror docs/MANUAL_TESTING.md §§2–4. The integration job boots an
+# Ollama sidecar service container and pulls a small structured-output capable
+# model so backend adapter tests can hit a real wire. The e2e job still treats
+# pytest's exit code 5 ("no tests collected") as success until later phases
+# populate the e2e marker.
 name: CI
 
 on:
@@ -80,7 +82,15 @@ jobs:
   integration:
     name: integration
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    services:
+      ollama:
+        image: ollama/ollama:0.5.4
+        ports:
+          - 11434:11434
+    env:
+      OLLAMA_INTEGRATION_BASE_URL: http://localhost:11434
+      OLLAMA_INTEGRATION_MODEL: llama3.2:1b
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -98,19 +108,32 @@ jobs:
       - name: Sync dependencies
         run: uv sync --frozen
 
-      - name: Run integration tier
-        # docker-compose.test.yml (Ollama sidecar) lands in a later P0 task; until
-        # then the marker collects nothing and pytest exits 5. Treat as success.
+      - name: Wait for Ollama sidecar to accept HTTP
+        # The ollama/ollama image has no curl, so we probe from the runner via
+        # the published port mapping. Bail out after ~60s if the daemon never
+        # comes up — a stuck sidecar is a CI failure, not a silent skip.
         run: |
-          set +e
-          uv run pytest -m integration -q
-          code=$?
-          set -e
-          if [ "$code" = "5" ]; then
-            echo "::notice::No integration tests collected — P0 skeleton stage."
-            exit 0
-          fi
-          exit "$code"
+          for attempt in $(seq 1 30); do
+            if curl --silent --fail --max-time 2 "${OLLAMA_INTEGRATION_BASE_URL}/api/tags" >/dev/null; then
+              echo "Ollama ready after ${attempt} attempt(s)."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Ollama sidecar never became reachable at ${OLLAMA_INTEGRATION_BASE_URL}." >&2
+          exit 1
+
+      - name: Pull integration model (${{ env.OLLAMA_INTEGRATION_MODEL }})
+        # /api/pull streams progress when stream=true; we want a single blocking
+        # call so the next step can assume the model is resident.
+        run: |
+          curl --fail --show-error --silent \
+            -X POST "${OLLAMA_INTEGRATION_BASE_URL}/api/pull" \
+            -H "Content-Type: application/json" \
+            -d "{\"name\":\"${OLLAMA_INTEGRATION_MODEL}\",\"stream\":false}"
+
+      - name: Run integration tier
+        run: uv run pytest -m integration -q
 
   e2e:
     name: e2e
