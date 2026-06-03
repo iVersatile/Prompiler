@@ -17,12 +17,20 @@ Two contracts are exercised here:
 
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Any
 
+import httpx
 import pytest
 
 from prompiler.backends.claude import ClaudeAdapter
-from prompiler.backends.gemini import GEMINI_DROP_KEYS, GEMINI_MAX_DEPTH, GeminiAdapter
+from prompiler.backends.gemini import (
+    GEMINI_BASE_URL,
+    GEMINI_DROP_KEYS,
+    GEMINI_MAX_DEPTH,
+    GeminiAdapter,
+)
 from prompiler.backends.mock import MockAdapter
 from prompiler.backends.ollama import OllamaAdapter
 from prompiler.backends.openai import OpenAIAdapter
@@ -129,3 +137,66 @@ def test_gemini_caps_nesting_depth() -> None:
     assert _max_depth(deep_input) == 9
     out = adapter.to_tool_schema(deep_input)
     assert _max_depth(out) <= GEMINI_MAX_DEPTH
+
+
+@pytest.mark.unit
+def test_gemini_extract_strips_hostile_keys_on_wire() -> None:
+    """Regression: ``extract()`` must route schema through ``to_tool_schema``.
+
+    Prior bug: the live path passed the raw ``json_schema`` into the
+    ``functionDeclarations[].parameters`` field, so Gemini-hostile keys
+    (``additionalProperties`` et al.) reached the wire and the API rejected
+    with HTTP 400 ``INVALID_ARGUMENT``. The projection helper existed but
+    the live call site bypassed it.
+    """
+    captured: dict[str, Any] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["body"] = json.loads(request.content)
+        function_call = {
+            "name": "extract",
+            "args": {"email": "a@b.c", "price": 1.0},
+        }
+        payload = {
+            "candidates": [
+                {
+                    "content": {
+                        "role": "model",
+                        "parts": [{"functionCall": function_call}],
+                    },
+                    "finishReason": "STOP",
+                    "index": 0,
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 1,
+                "candidatesTokenCount": 1,
+                "totalTokenCount": 2,
+            },
+        }
+        return httpx.Response(200, json=payload)
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(
+        base_url=GEMINI_BASE_URL,
+        transport=transport,
+        headers={"content-type": "application/json"},
+    )
+    adapter = GeminiAdapter(client=client)
+
+    async def run() -> dict[str, Any]:
+        try:
+            return await adapter.extract(prompt="probe", json_schema=PROBE_SCHEMA)
+        finally:
+            await client.aclose()
+
+    result = asyncio.run(run())
+    assert result == {"email": "a@b.c", "price": 1.0}
+
+    body = captured["body"]
+    parameters = body["tools"][0]["functionDeclarations"][0]["parameters"]
+    leaked = _find_keys(parameters, GEMINI_DROP_KEYS)
+    assert leaked == [], f"extract() bypassed to_tool_schema — hostile keys reached wire: {leaked}"
+    # Sanity: meaningful structure still present.
+    assert parameters["type"] == "object"
+    assert set(parameters["properties"].keys()) == {"email", "price", "tags"}

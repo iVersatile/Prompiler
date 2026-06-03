@@ -133,7 +133,7 @@ class GeminiAdapter:
                         {
                             "name": EXTRACT_TOOL_NAME,
                             "description": EXTRACT_TOOL_DESCRIPTION,
-                            "parameters": json_schema,
+                            "parameters": self.to_tool_schema(json_schema),
                         }
                     ]
                 }
