@@ -101,7 +101,12 @@ class ClaudeAdapter:
 
         async def _do_post() -> httpx.Response:
             response = await self._client.post("/v1/messages", json=payload)
-            response.raise_for_status()
+            if response.status_code >= 400:
+                raise httpx.HTTPStatusError(
+                    f"Claude {response.status_code}: {response.text}",
+                    request=response.request,
+                    response=response,
+                )
             return response
 
         started = time.perf_counter()
