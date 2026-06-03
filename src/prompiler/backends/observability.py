@@ -60,7 +60,7 @@ class PricingTable:
 
 DEFAULT_PRICING_TABLE = PricingTable(
     rates={
-        ("claude", "claude-3-5-sonnet-20241022"): PricingEntry(3.0, 15.0),
+        ("claude", "claude-haiku-4-5-20251001"): PricingEntry(1.0, 5.0),
         ("openai", "gpt-4o-mini"): PricingEntry(0.15, 0.60),
         ("gemini", "gemini-2.5-flash"): PricingEntry(0.30, 2.50),
         ("ollama", "llama3.1"): PricingEntry(0.0, 0.0),
