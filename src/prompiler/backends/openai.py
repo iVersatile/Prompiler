@@ -17,11 +17,18 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from typing import Any
 
 import httpx
 
 from prompiler.backends.credentials import CredentialError, CredentialProvider
+from prompiler.backends.observability import (
+    DEFAULT_PRICING_TABLE,
+    ObservabilityHook,
+    PricingTable,
+    emit_call_metrics,
+)
 from prompiler.backends.retry import RetryPolicy, with_retry
 
 OPENAI_BASE_URL = "https://api.openai.com"
@@ -39,9 +46,13 @@ class OpenAIAdapter:
         credentials: CredentialProvider | None = None,
         model: str = DEFAULT_MODEL,
         retry_policy: RetryPolicy | None = None,
+        observability: ObservabilityHook | None = None,
+        pricing: PricingTable | None = None,
     ) -> None:
         self._model = model
         self._retry_policy = retry_policy or RetryPolicy()
+        self._observability = observability
+        self._pricing = pricing or DEFAULT_PRICING_TABLE
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -95,7 +106,9 @@ class OpenAIAdapter:
             response.raise_for_status()
             return response
 
+        started = time.perf_counter()
         response = await with_retry(_do_post, policy=self._retry_policy)
+        latency = time.perf_counter() - started
         body: dict[str, Any] = response.json()
         for choice in body.get("choices", []):
             message = choice.get("message") or {}
@@ -108,6 +121,16 @@ class OpenAIAdapter:
                     continue
                 parsed = json.loads(arguments)
                 if isinstance(parsed, dict):
+                    usage = body.get("usage") or {}
+                    await emit_call_metrics(
+                        hook=self._observability,
+                        backend="openai",
+                        model=self._model,
+                        latency_seconds=latency,
+                        prompt_tokens=int(usage.get("prompt_tokens", 0)),
+                        completion_tokens=int(usage.get("completion_tokens", 0)),
+                        pricing=self._pricing,
+                    )
                     return parsed
         raise RuntimeError(
             f"OpenAI response missing tool_calls entry for {EXTRACT_TOOL_NAME!r}: {body!r}"

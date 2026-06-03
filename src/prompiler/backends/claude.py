@@ -15,11 +15,18 @@ conforms to the supplied JSON Schema.
 from __future__ import annotations
 
 import copy
+import time
 from typing import Any
 
 import httpx
 
 from prompiler.backends.credentials import CredentialError, CredentialProvider
+from prompiler.backends.observability import (
+    DEFAULT_PRICING_TABLE,
+    ObservabilityHook,
+    PricingTable,
+    emit_call_metrics,
+)
 from prompiler.backends.retry import RetryPolicy, with_retry
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
@@ -40,10 +47,14 @@ class ClaudeAdapter:
         model: str = DEFAULT_MODEL,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         retry_policy: RetryPolicy | None = None,
+        observability: ObservabilityHook | None = None,
+        pricing: PricingTable | None = None,
     ) -> None:
         self._model = model
         self._max_tokens = max_tokens
         self._retry_policy = retry_policy or RetryPolicy()
+        self._observability = observability
+        self._pricing = pricing or DEFAULT_PRICING_TABLE
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -93,12 +104,24 @@ class ClaudeAdapter:
             response.raise_for_status()
             return response
 
+        started = time.perf_counter()
         response = await with_retry(_do_post, policy=self._retry_policy)
+        latency = time.perf_counter() - started
         body: dict[str, Any] = response.json()
         for block in body.get("content", []):
             if block.get("type") == "tool_use" and block.get("name") == EXTRACT_TOOL_NAME:
                 tool_input = block.get("input")
                 if isinstance(tool_input, dict):
+                    usage = body.get("usage") or {}
+                    await emit_call_metrics(
+                        hook=self._observability,
+                        backend="claude",
+                        model=self._model,
+                        latency_seconds=latency,
+                        prompt_tokens=int(usage.get("input_tokens", 0)),
+                        completion_tokens=int(usage.get("output_tokens", 0)),
+                        pricing=self._pricing,
+                    )
                     return tool_input
         raise RuntimeError(
             f"Claude response missing tool_use block for {EXTRACT_TOOL_NAME!r}: {body!r}"

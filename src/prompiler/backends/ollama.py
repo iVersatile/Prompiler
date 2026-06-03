@@ -19,10 +19,17 @@ from __future__ import annotations
 
 import copy
 import json
+import time
 from typing import Any
 
 import httpx
 
+from prompiler.backends.observability import (
+    DEFAULT_PRICING_TABLE,
+    ObservabilityHook,
+    PricingTable,
+    emit_call_metrics,
+)
 from prompiler.backends.retry import RetryPolicy, with_retry
 
 OLLAMA_BASE_URL = "http://localhost:11434"
@@ -37,9 +44,13 @@ class OllamaAdapter:
         client: httpx.AsyncClient | None = None,
         model: str = DEFAULT_MODEL,
         retry_policy: RetryPolicy | None = None,
+        observability: ObservabilityHook | None = None,
+        pricing: PricingTable | None = None,
     ) -> None:
         self._model = model
         self._retry_policy = retry_policy or RetryPolicy()
+        self._observability = observability
+        self._pricing = pricing or DEFAULT_PRICING_TABLE
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -68,7 +79,9 @@ class OllamaAdapter:
             response.raise_for_status()
             return response
 
+        started = time.perf_counter()
         response = await with_retry(_do_post, policy=self._retry_policy)
+        latency = time.perf_counter() - started
         body: dict[str, Any] = response.json()
         message = body.get("message") or {}
         content = message.get("content")
@@ -77,6 +90,15 @@ class OllamaAdapter:
         parsed = json.loads(content)
         if not isinstance(parsed, dict):
             raise RuntimeError(f"Ollama message.content did not decode to dict: {content!r}")
+        await emit_call_metrics(
+            hook=self._observability,
+            backend="ollama",
+            model=self._model,
+            latency_seconds=latency,
+            prompt_tokens=int(body.get("prompt_eval_count", 0)),
+            completion_tokens=int(body.get("eval_count", 0)),
+            pricing=self._pricing,
+        )
         return parsed
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:

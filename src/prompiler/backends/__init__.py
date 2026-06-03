@@ -18,12 +18,22 @@ from prompiler.backends.credentials import (
     GoogleADCProvider,
 )
 from prompiler.backends.gemini import GeminiAdapter
+from prompiler.backends.observability import (
+    DEFAULT_PRICING_TABLE,
+    BackendCallMetrics,
+    ObservabilityHook,
+    PricingEntry,
+    PricingTable,
+    emit_call_metrics,
+)
 from prompiler.backends.ollama import OllamaAdapter
 from prompiler.backends.openai import OpenAIAdapter
 from prompiler.backends.retry import RetryPolicy, with_retry
 
 __all__ = [
+    "DEFAULT_PRICING_TABLE",
     "BackendAdapter",
+    "BackendCallMetrics",
     "ClaudeAdapter",
     "Credential",
     "CredentialError",
@@ -31,8 +41,12 @@ __all__ = [
     "EnvVarProvider",
     "GeminiAdapter",
     "GoogleADCProvider",
+    "ObservabilityHook",
     "OllamaAdapter",
     "OpenAIAdapter",
+    "PricingEntry",
+    "PricingTable",
     "RetryPolicy",
+    "emit_call_metrics",
     "with_retry",
 ]

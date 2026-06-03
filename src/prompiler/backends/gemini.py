@@ -16,11 +16,18 @@ conforming to the supplied JSON Schema.
 from __future__ import annotations
 
 import copy
+import time
 from typing import Any, cast
 
 import httpx
 
 from prompiler.backends.credentials import CredentialError, CredentialProvider
+from prompiler.backends.observability import (
+    DEFAULT_PRICING_TABLE,
+    ObservabilityHook,
+    PricingTable,
+    emit_call_metrics,
+)
 from prompiler.backends.retry import RetryPolicy, with_retry
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
@@ -82,9 +89,13 @@ class GeminiAdapter:
         credentials: CredentialProvider | None = None,
         model: str = DEFAULT_MODEL,
         retry_policy: RetryPolicy | None = None,
+        observability: ObservabilityHook | None = None,
+        pricing: PricingTable | None = None,
     ) -> None:
         self._model = model
         self._retry_policy = retry_policy or RetryPolicy()
+        self._observability = observability
+        self._pricing = pricing or DEFAULT_PRICING_TABLE
         if client is not None:
             self._client = client
             self._owns_client = False
@@ -141,7 +152,9 @@ class GeminiAdapter:
             response.raise_for_status()
             return response
 
+        started = time.perf_counter()
         response = await with_retry(_do_post, policy=self._retry_policy)
+        latency = time.perf_counter() - started
         body: dict[str, Any] = response.json()
         for candidate in body.get("candidates", []):
             content = candidate.get("content") or {}
@@ -153,6 +166,16 @@ class GeminiAdapter:
                     continue
                 args = function_call.get("args")
                 if isinstance(args, dict):
+                    usage = body.get("usageMetadata") or {}
+                    await emit_call_metrics(
+                        hook=self._observability,
+                        backend="gemini",
+                        model=self._model,
+                        latency_seconds=latency,
+                        prompt_tokens=int(usage.get("promptTokenCount", 0)),
+                        completion_tokens=int(usage.get("candidatesTokenCount", 0)),
+                        pricing=self._pricing,
+                    )
                     return args
         raise RuntimeError(
             f"Gemini response missing functionCall for {EXTRACT_TOOL_NAME!r}: {body!r}"
