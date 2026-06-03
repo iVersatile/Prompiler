@@ -133,7 +133,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - Test infrastructure:
   - [x] Mock adapter for unit tests.
   - [x] Cassette recorder/player for paid backends (VCR-style).
-  - [ ] Ollama sidecar integration test running on every PR. _(in progress)_
+  - [x] Ollama sidecar integration test running on every PR.
 
 **Acceptance criteria**
 
