@@ -75,6 +75,10 @@ class _ScriptedAdapter:
         timeout: float | None = None,
     ) -> dict[str, Any]:
         self.calls += 1
+        assert self._script, (
+            f"_ScriptedAdapter exhausted on call {self.calls}; "
+            "test scripted fewer responses than orchestrator requested"
+        )
         head = self._script.pop(0)
         if isinstance(head, (AdapterError, asyncio.TimeoutError)):
             raise head
@@ -128,11 +132,45 @@ def test_refusal_surfaces_as_adapter_error_without_retry() -> None:
 
 @pytest.mark.unit
 def test_timeout_propagates_without_orchestrator_retry() -> None:
+    """Pin the timeout contract at the orchestrator layer.
+
+    The orchestrator does not internally wrap the adapter call in
+    ``asyncio.wait_for`` — its pipeline is expected to be cancellable so the
+    caller can enforce a wall-clock budget via ``wait_for`` at the orchestrator
+    boundary. This test wraps the orchestrator's ``run`` coroutine and asserts
+    cancellation surfaces as ``asyncio.TimeoutError`` (preserved verbatim, no
+    validation-retry double-spend).
+    """
     registry = _register()
-    adapter = _ScriptedAdapter([TimeoutError()])
+
+    class _SleepingAdapter:
+        def __init__(self) -> None:
+            self.calls: int = 0
+
+        async def extract(
+            self,
+            *,
+            prompt: str,
+            json_schema: dict[str, Any],
+            timeout: float | None = None,
+        ) -> dict[str, Any]:
+            self.calls += 1
+            await asyncio.sleep(10)
+            return {"title": "never", "count": 0}
+
+        def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+            return dict(json_schema)
+
+    adapter = _SleepingAdapter()
+
+    async def _race() -> None:
+        await asyncio.wait_for(
+            run("doc", "body", backend=adapter, registry=registry),
+            timeout=0.05,
+        )
 
     with pytest.raises(asyncio.TimeoutError):
-        asyncio.run(run("doc", "body", backend=adapter, registry=registry, timeout=0.1))
+        asyncio.run(_race())
 
     assert adapter.calls == 1
 

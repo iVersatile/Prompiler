@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, TypedDict
 
 import pytest
 import yaml
@@ -30,7 +30,21 @@ from pydantic import BaseModel
 from prompiler.runtime.orchestrator import run
 from prompiler.runtime.registry import Registry, discover
 
-_INVOICE_SPEC: Final[dict[str, Any]] = {
+
+class _SpecField(TypedDict):
+    name: str
+    type: str
+    required: bool
+
+
+class _SpecDict(TypedDict):
+    spec_version: int
+    name: str
+    task: str
+    fields: list[_SpecField]
+
+
+_INVOICE_SPEC: Final[_SpecDict] = {
     "spec_version": 1,
     "name": "invoice_line",
     "task": "extract",
@@ -40,7 +54,7 @@ _INVOICE_SPEC: Final[dict[str, Any]] = {
     ],
 }
 
-_RECEIPT_SPEC: Final[dict[str, Any]] = {
+_RECEIPT_SPEC: Final[_SpecDict] = {
     "spec_version": 1,
     "name": "receipt_line",
     "task": "extract",
@@ -93,7 +107,7 @@ class _SchemaDispatchScriptedAdapter:
         return dict(json_schema)
 
 
-def _write_spec(dir_path: Path, filename: str, spec: dict[str, Any]) -> None:
+def _write_spec(dir_path: Path, filename: str, spec: _SpecDict) -> None:
     (dir_path / filename).write_text(yaml.safe_dump(spec, sort_keys=False))
 
 

@@ -3,11 +3,12 @@
 Asserts that ``run_batch`` over 100 concurrent items does not exceed an
 explicit peak-memory budget, measured with :mod:`tracemalloc`.
 
-The budget is deliberately conservative (50 MB peak above baseline). The
-goal is not micro-benchmarking; it is a regression net for accidental
-unbounded buffering inside ``run_batch`` (e.g., capturing full prompts
-per coroutine, leaking adapter state, retaining ``BaseModel`` instances
-indefinitely).
+The budget is 1 MB peak above baseline (~2.7x observed max under the
+current harness). The goal is not micro-benchmarking; it is a regression
+net for accidental unbounded buffering inside ``run_batch`` (e.g.,
+capturing full prompts per coroutine, leaking adapter state, retaining
+``BaseModel`` instances indefinitely). A loose budget (the prior 50 MB)
+would mask an order-of-magnitude regression; 1 MB still catches it.
 
 Mirror the harness in ``test_runtime_orchestrator.py``: pytest-asyncio is
 not installed, so coroutines run under ``asyncio.run`` inside a sync test
@@ -30,7 +31,7 @@ from prompiler.spec import EntitySpec
 
 _BATCH_SIZE: Final[int] = 100
 _CONCURRENCY: Final[int] = 8
-_PEAK_BUDGET_BYTES: Final[int] = 50 * 1024 * 1024
+_PEAK_BUDGET_BYTES: Final[int] = 1 * 1024 * 1024
 _INPUT_TEXT_BYTES: Final[int] = 5 * 1024
 _RESPONSE_TITLE_BYTES: Final[int] = 5 * 1024
 
