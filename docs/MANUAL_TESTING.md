@@ -282,7 +282,36 @@ cosign verify-attestation --type cyclonedx "$IMAGE" \
 
 ---
 
-## 11. Reporting Local Test Failures
+## 11. Credential Leak Sanity Check
+
+Quick scan to catch credential material that may have slipped into git history,
+shell history, or recorded cassettes. Run periodically and before any release.
+
+```bash
+# Real-looking provider keys anywhere in git history (pickaxe).
+git log -p --all -S 'sk-ant-api03-' | head    # Anthropic
+git log -p --all -S 'AIzaSy'        | head    # Google
+git log -p --all -S 'sk-proj-'      | head    # OpenAI project
+
+# Shell history (zsh).
+grep -E 'sk-ant-api03-|AIzaSy|sk-proj-' ~/.zsh_history
+
+# Cassettes (HTTP recordings) — common leak path on first record run.
+grep -rE 'sk-ant-api03-|AIzaSy|sk-proj-' tests/cassettes/ 2>/dev/null
+```
+
+All four commands should return empty. A hit on any of them means real key
+material has been persisted — rotate that provider's key immediately, then
+audit the leak path (git history rewrite, history line removal, cassette
+re-redaction).
+
+Test fixtures using fake placeholders such as `"sk-ant-1"` are benign — real
+keys are much longer (Anthropic ~108 chars, prefix `sk-ant-api03-`). The
+prefixes above are tuned to avoid those false positives.
+
+---
+
+## 12. Reporting Local Test Failures
 
 When opening an issue from a local run, include:
 
