@@ -52,7 +52,7 @@ class _RecordingHook:
 def test_backend_call_metrics_is_frozen() -> None:
     m = BackendCallMetrics(
         backend="claude",
-        model="claude-3-5-sonnet-20241022",
+        model="claude-haiku-4-5-20251001",
         latency_seconds=0.123,
         prompt_tokens=100,
         completion_tokens=50,
@@ -95,7 +95,7 @@ def test_pricing_table_unknown_pair_returns_zero() -> None:
 @pytest.mark.unit
 def test_default_pricing_table_covers_shipped_backends() -> None:
     expected_keys = {
-        ("claude", "claude-3-5-sonnet-20241022"),
+        ("claude", "claude-haiku-4-5-20251001"),
         ("openai", "gpt-4o-mini"),
         ("gemini", "gemini-2.5-flash"),
         ("ollama", "llama3.1"),
@@ -247,12 +247,12 @@ def test_claude_adapter_emits_metrics_on_success() -> None:
     assert len(hook.calls) == 1
     m = hook.calls[0]
     assert m.backend == "claude"
-    assert m.model == "claude-3-5-sonnet-20241022"
+    assert m.model == "claude-haiku-4-5-20251001"
     assert m.prompt_tokens == 100
     assert m.completion_tokens == 50
     assert m.latency_seconds >= 0.0
-    # claude-3-5-sonnet pricing $3 / $15 per 1M
-    expected_cost = 100 * 3.0 / 1_000_000 + 50 * 15.0 / 1_000_000
+    # claude-haiku-4-5 pricing $1.00 / $5.00 per 1M
+    expected_cost = 100 * 1.0 / 1_000_000 + 50 * 5.0 / 1_000_000
     assert m.cost_usd == pytest.approx(expected_cost)
 
 

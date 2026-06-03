@@ -31,7 +31,7 @@ from prompiler.backends.retry import RetryPolicy, with_retry
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
-DEFAULT_MODEL = "claude-3-5-sonnet-20241022"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = 4096
 EXTRACT_TOOL_NAME = "extract"
 EXTRACT_TOOL_DESCRIPTION = "Return structured data matching the provided JSON Schema."
