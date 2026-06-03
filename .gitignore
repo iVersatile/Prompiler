@@ -80,3 +80,4 @@ docs/_archive/
 # Prompiler artefacts (compiled outputs are not source)
 out/
 artefacts/
+.envrc
