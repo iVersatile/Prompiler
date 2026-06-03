@@ -119,7 +119,12 @@ class OpenAIAdapter:
                 arguments = function.get("arguments")
                 if not isinstance(arguments, str):
                     continue
-                parsed = json.loads(arguments)
+                try:
+                    parsed = json.loads(arguments)
+                except json.JSONDecodeError as exc:
+                    raise RuntimeError(
+                        f"OpenAI response arguments not valid JSON: {truncate_for_error(arguments)}"
+                    ) from exc
                 if isinstance(parsed, dict):
                     usage = body.get("usage") or {}
                     await emit_call_metrics(
