@@ -10,6 +10,16 @@ This document is the source of truth. `CLAUDE.md` at the repo root is a thin poi
 
 Single phase-aware command. Each invocation runs one task end-to-end: implement, gate, pause for review, commit, push, advance the plan.
 
+### 1.0 Feature-branch precondition
+
+Before any code edit, the agent must be on a non-`main`, non-`master` branch. If `git rev-parse --abbrev-ref HEAD` reports `main` or `master`, the agent must first run `git checkout -b feat/<slug>` (or another non-protected branch) before touching any file.
+
+Enforcement: the `branch-guard` hook at the `pre-commit` stage of `.pre-commit-config.yaml` runs `python3 scripts/check_branch_guard.py` first — before ruff/mypy/pytest — and fails the commit when HEAD is on `main`/`master`.
+
+Escape hatch: `ALLOW_MAIN_COMMIT=1 git commit ...` bypasses the gate for declared emergency fixes (hotfixes, branch-protection bypasses). The escape hatch is intentional, audited via git history, and must not be used for routine work.
+
+Rationale: untracked files survive `git checkout` between branches. The §3 pre-push working-tree-clean gate only catches *dirty* trees — it does not catch untracked work that gets staged and committed onto the wrong branch. Without this gate, an agent that lands on `main` between phases can silently accumulate code commits there.
+
 ### 1.1 Steps
 
 1. Read `docs/PLAN.md`. Identify the current in-progress task — the first unchecked checkbox in the active phase.

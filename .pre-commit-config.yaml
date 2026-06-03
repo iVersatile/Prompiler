@@ -20,6 +20,21 @@ default_stages: [pre-commit]
 
 repos:
   # ---------------------------------------------------------------------------
+  # §1.0 Feature-branch precondition — refuse to commit on main/master unless
+  # ALLOW_MAIN_COMMIT=1 is set. Runs first so a wrong-branch commit fails fast
+  # before the heavier ruff/mypy/pytest gates burn CPU.
+  # ---------------------------------------------------------------------------
+
+  - repo: local
+    hooks:
+      - id: branch-guard
+        name: branch guard (block main/master unless ALLOW_MAIN_COMMIT=1)
+        entry: python3 scripts/check_branch_guard.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+
+  # ---------------------------------------------------------------------------
   # §2 Pre-commit gate — must pass before any commit lands.
   # ---------------------------------------------------------------------------
 
