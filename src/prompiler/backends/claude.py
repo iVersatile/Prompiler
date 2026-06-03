@@ -15,11 +15,11 @@ conforms to the supplied JSON Schema.
 from __future__ import annotations
 
 import copy
-import time
 from typing import Any
 
 import httpx
 
+from prompiler.backends._pipeline import post_with_retry, truncate_for_error
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -27,7 +27,7 @@ from prompiler.backends.observability import (
     PricingTable,
     emit_call_metrics,
 )
-from prompiler.backends.retry import RetryPolicy, with_retry
+from prompiler.backends.retry import RetryPolicy
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
@@ -84,6 +84,7 @@ class ClaudeAdapter:
         *,
         prompt: str,
         json_schema: dict[str, Any],
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self._model,
@@ -99,20 +100,14 @@ class ClaudeAdapter:
             "tool_choice": {"type": "tool", "name": EXTRACT_TOOL_NAME},
         }
 
-        async def _do_post() -> httpx.Response:
-            response = await self._client.post("/v1/messages", json=payload)
-            if response.status_code >= 400:
-                raise httpx.HTTPStatusError(
-                    f"Claude {response.status_code}: {response.text}",
-                    request=response.request,
-                    response=response,
-                )
-            return response
-
-        started = time.perf_counter()
-        response = await with_retry(_do_post, policy=self._retry_policy)
-        latency = time.perf_counter() - started
-        body: dict[str, Any] = response.json()
+        body, latency = await post_with_retry(
+            client=self._client,
+            path="/v1/messages",
+            payload=payload,
+            vendor_label="Claude",
+            retry_policy=self._retry_policy,
+            timeout=timeout,
+        )
         for block in body.get("content", []):
             if block.get("type") == "tool_use" and block.get("name") == EXTRACT_TOOL_NAME:
                 tool_input = block.get("input")
@@ -129,7 +124,8 @@ class ClaudeAdapter:
                     )
                     return tool_input
         raise RuntimeError(
-            f"Claude response missing tool_use block for {EXTRACT_TOOL_NAME!r}: {body!r}"
+            f"Claude response missing tool_use block for {EXTRACT_TOOL_NAME!r}: "
+            f"{truncate_for_error(body)}"
         )
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:

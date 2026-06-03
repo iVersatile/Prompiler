@@ -40,9 +40,13 @@ class MockAdapter:
         *,
         prompt: str,
         json_schema: dict[str, Any],
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         required = json_schema.get("required", [])
         return {key: "mock" for key in required}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)
+
+    async def aclose(self) -> None:
+        return None
