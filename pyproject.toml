@@ -119,6 +119,7 @@ markers = [
     "unit: fast, hermetic unit tests (gate at commit time)",
     "integration: cross-component tests (CI only)",
     "e2e: end-to-end CLI/MCP tests (CI only)",
+    "live_smoke: nightly checks against real vendor APIs (workflow only)",
 ]
 
 # -----------------------------------------------------------------------------
