@@ -89,7 +89,12 @@ class OllamaAdapter:
             raise RuntimeError(
                 f"Ollama response missing message.content string: {truncate_for_error(body)}"
             )
-        parsed = json.loads(content)
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Ollama message.content not valid JSON: {truncate_for_error(content)}"
+            ) from exc
         if not isinstance(parsed, dict):
             raise RuntimeError(
                 f"Ollama message.content did not decode to dict: {truncate_for_error(content)}"
