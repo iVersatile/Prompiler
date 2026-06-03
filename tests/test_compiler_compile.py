@@ -147,9 +147,36 @@ def test_compile_returns_artefact_bundle_instance() -> None:
 
 
 @pytest.mark.unit
-def test_artefact_bundle_has_four_documented_fields() -> None:
+def test_artefact_bundle_has_documented_fields() -> None:
     field_names = {f.name for f in dataclasses.fields(ArtefactBundle)}
-    assert field_names == {"prompt", "pydantic_cls", "tool_schema_per_backend", "spec_hash"}
+    assert field_names == {
+        "prompt",
+        "pydantic_cls",
+        "tool_schema_per_backend",
+        "spec_hash",
+        "max_input_tokens",
+    }
+
+
+@pytest.mark.unit
+def test_compile_threads_max_input_tokens_into_bundle() -> None:
+    from prompiler.spec import EntitySpec, FieldSpec
+
+    spec = EntitySpec(
+        spec_version=1,
+        name="capped",
+        task="extract",
+        fields=[FieldSpec(name="x", type="string")],
+        max_input_tokens=4096,
+    )
+    bundle = compile(spec)
+    assert bundle.max_input_tokens == 4096
+
+
+@pytest.mark.unit
+def test_compile_defaults_max_input_tokens_to_none() -> None:
+    bundle = compile(_extract_spec())
+    assert bundle.max_input_tokens is None
 
 
 @pytest.mark.unit

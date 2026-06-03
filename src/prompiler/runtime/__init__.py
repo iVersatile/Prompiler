@@ -36,6 +36,7 @@ from prompiler.runtime.errors import (
     PrompilerError,
     SpecError,
 )
+from prompiler.runtime.orchestrator import run, run_batch, run_sync
 
 __all__ = [
     "AdapterError",
@@ -45,4 +46,7 @@ __all__ = [
     "MCPError",
     "PrompilerError",
     "SpecError",
+    "run",
+    "run_batch",
+    "run_sync",
 ]

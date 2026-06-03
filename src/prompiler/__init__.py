@@ -22,10 +22,14 @@ for the spec_hash formula.
 
 from prompiler.compiler import ArtefactBundle  # noqa: E402
 from prompiler.compiler import compile_spec as compile  # noqa: E402
+from prompiler.runtime import run, run_batch, run_sync  # noqa: E402
 
 __all__ = [
     "COMPILER_PROTOCOL_VERSION",
     "ArtefactBundle",
     "__version__",
     "compile",
+    "run",
+    "run_batch",
+    "run_sync",
 ]
