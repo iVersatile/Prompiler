@@ -34,11 +34,21 @@ cannot silently relax it:
 
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 
-from prompiler.compiler import compile_spec
-from prompiler.registry import Registry
-from prompiler.spec import EntitySpec
+import pytest
+import yaml
+from pydantic import ValidationError
+
+import prompiler.registry as registry_module
+from prompiler.compiler import ArtefactBundle, compile_spec
+from prompiler.registry import (
+    Registry,
+    get,
+    register_from_dict,
+    register_from_path,
+)
+from prompiler.spec import EntitySpec, SpecLoadError
 
 INVOICE_SPEC: dict[str, object] = {
     "spec_version": 1,
@@ -51,7 +61,7 @@ INVOICE_SPEC: dict[str, object] = {
 }
 
 
-def _invoice_bundle():
+def _invoice_bundle() -> ArtefactBundle:
     spec = EntitySpec.model_validate(INVOICE_SPEC)
     return compile_spec(spec)
 
@@ -158,3 +168,212 @@ def test_empty_registry_names_is_empty_frozenset() -> None:
     reg = Registry()
     assert reg.names() == frozenset()
     assert "anything" not in reg
+
+
+# ---------------------------------------------------------------------------
+# Sub-step 2: programmatic helpers
+# ---------------------------------------------------------------------------
+#
+# Scope (architecture.md L265, verbatim):
+#   "Programmatic registration via `register_from_path()` and
+#   `register_from_dict()`."
+#
+# Public surface (architecture.md L117, verbatim):
+#   "from prompiler.registry import register_from_path, register_from_dict, get"
+#
+# Key derivation: spec's ``name`` field is the registry key (S5 — single
+# source of truth). Caller does not supply a separate name. The
+# ``^[a-z0-9_-]+$`` pattern is enforced at the ``Registry.register``
+# boundary, not re-validated in the helper (LL-004 — one validation
+# point per invariant).
+#
+# Isolation: helpers accept an optional ``registry=`` kwarg. Tests
+# inject a fresh ``Registry()`` to avoid leaking state through the
+# module-level singleton. The singleton itself is exercised by a single
+# dedicated test that resets it.
+
+
+RECEIPT_SPEC: dict[str, object] = {
+    "spec_version": 1,
+    "name": "receipt",
+    "task": "extract",
+    "description": "Extract receipt fields.",
+    "fields": [
+        {"name": "amount", "type": "decimal", "required": True},
+    ],
+}
+
+
+@pytest.fixture
+def fresh_default_registry(monkeypatch: pytest.MonkeyPatch) -> Registry:
+    """Swap the module singleton for a fresh instance for the test."""
+    fresh = Registry()
+    monkeypatch.setattr(registry_module, "_DEFAULT_REGISTRY", fresh)
+    return fresh
+
+
+@pytest.mark.unit
+def test_register_from_dict_returns_bundle_and_stores_under_spec_name() -> None:
+    reg = Registry()
+
+    bundle = register_from_dict(INVOICE_SPEC, registry=reg)
+
+    assert isinstance(bundle, ArtefactBundle)
+    assert reg.get("invoice") is bundle
+
+
+@pytest.mark.unit
+def test_register_from_dict_invalid_spec_raises_validation_error() -> None:
+    reg = Registry()
+    bad_spec = {"spec_version": 1, "name": "x"}  # missing required fields
+
+    with pytest.raises(ValidationError):
+        register_from_dict(bad_spec, registry=reg)
+
+    assert reg.names() == frozenset()
+
+
+@pytest.mark.unit
+def test_register_from_dict_invalid_name_raises_value_error() -> None:
+    reg = Registry()
+    bad_name_spec = dict(INVOICE_SPEC)
+    bad_name_spec["name"] = "Invoice"
+
+    with pytest.raises(ValueError) as exc_info:
+        register_from_dict(bad_name_spec, registry=reg)
+
+    assert "name" in str(exc_info.value).lower()
+    assert reg.names() == frozenset()
+
+
+@pytest.mark.unit
+def test_register_from_dict_duplicate_raises_value_error() -> None:
+    reg = Registry()
+    register_from_dict(INVOICE_SPEC, registry=reg)
+
+    with pytest.raises(ValueError) as exc_info:
+        register_from_dict(INVOICE_SPEC, registry=reg)
+
+    assert "invoice" in str(exc_info.value)
+
+
+@pytest.mark.unit
+def test_register_from_path_round_trip(tmp_path: Path) -> None:
+    reg = Registry()
+    spec_path = tmp_path / "invoice.yaml"
+    spec_path.write_text(yaml.safe_dump(INVOICE_SPEC), encoding="utf-8")
+
+    bundle = register_from_path(spec_path, registry=reg)
+
+    assert isinstance(bundle, ArtefactBundle)
+    assert reg.get("invoice") is bundle
+
+
+@pytest.mark.unit
+def test_register_from_path_accepts_str(tmp_path: Path) -> None:
+    reg = Registry()
+    spec_path = tmp_path / "invoice.yaml"
+    spec_path.write_text(yaml.safe_dump(INVOICE_SPEC), encoding="utf-8")
+
+    bundle = register_from_path(str(spec_path), registry=reg)
+
+    assert reg.get("invoice") is bundle
+    assert isinstance(bundle, ArtefactBundle)
+
+
+@pytest.mark.unit
+def test_register_from_path_missing_file_raises_spec_load_error(tmp_path: Path) -> None:
+    reg = Registry()
+    missing = tmp_path / "nope.yaml"
+
+    with pytest.raises(SpecLoadError):
+        register_from_path(missing, registry=reg)
+
+    assert reg.names() == frozenset()
+
+
+@pytest.mark.unit
+def test_register_from_path_invalid_yaml_raises_spec_load_error(tmp_path: Path) -> None:
+    reg = Registry()
+    spec_path = tmp_path / "broken.yaml"
+    spec_path.write_text("name: invoice\n: bad indent\n", encoding="utf-8")
+
+    with pytest.raises(SpecLoadError):
+        register_from_path(spec_path, registry=reg)
+
+    assert reg.names() == frozenset()
+
+
+@pytest.mark.unit
+def test_register_from_path_invalid_spec_name_raises_value_error(tmp_path: Path) -> None:
+    bad = dict(INVOICE_SPEC)
+    bad["name"] = "Invoice"
+    spec_path = tmp_path / "bad.yaml"
+    spec_path.write_text(yaml.safe_dump(bad), encoding="utf-8")
+    reg = Registry()
+
+    with pytest.raises(ValueError):
+        register_from_path(spec_path, registry=reg)
+
+    assert reg.names() == frozenset()
+
+
+@pytest.mark.unit
+def test_module_level_get_delegates_to_injected_registry() -> None:
+    reg = Registry()
+    bundle = register_from_dict(INVOICE_SPEC, registry=reg)
+
+    assert get("invoice", registry=reg) is bundle
+
+
+@pytest.mark.unit
+def test_module_level_get_missing_raises_keyerror() -> None:
+    reg = Registry()
+
+    with pytest.raises(KeyError):
+        get("missing", registry=reg)
+
+
+@pytest.mark.unit
+def test_injected_registry_does_not_touch_default_singleton(
+    fresh_default_registry: Registry,
+) -> None:
+    isolated = Registry()
+
+    register_from_dict(INVOICE_SPEC, registry=isolated)
+
+    assert "invoice" in isolated
+    assert "invoice" not in fresh_default_registry
+    assert fresh_default_registry.names() == frozenset()
+
+
+@pytest.mark.unit
+def test_default_registry_used_when_no_registry_arg(
+    fresh_default_registry: Registry,
+) -> None:
+    bundle = register_from_dict(RECEIPT_SPEC)
+
+    assert get("receipt") is bundle
+    assert "receipt" in fresh_default_registry
+
+
+@pytest.mark.unit
+def test_default_registry_path_helper(tmp_path: Path, fresh_default_registry: Registry) -> None:
+    spec_path = tmp_path / "invoice.yaml"
+    spec_path.write_text(yaml.safe_dump(INVOICE_SPEC), encoding="utf-8")
+
+    bundle = register_from_path(spec_path)
+
+    assert get("invoice") is bundle
+    assert "invoice" in fresh_default_registry
+
+
+@pytest.mark.unit
+def test_public_exports_listed_in_dunder_all() -> None:
+    assert hasattr(registry_module, "__all__")
+    assert set(registry_module.__all__) >= {
+        "Registry",
+        "register_from_dict",
+        "register_from_path",
+        "get",
+    }

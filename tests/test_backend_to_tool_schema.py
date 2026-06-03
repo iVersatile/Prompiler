@@ -111,7 +111,11 @@ def test_passthrough_preserves_schema(factory: Any) -> None:
 @pytest.mark.parametrize("factory", PASSTHROUGH_FACTORIES)
 def test_passthrough_returns_deep_copy(factory: Any) -> None:
     adapter = factory()
-    src = {"type": "object", "properties": {"x": {"type": "string"}}, "required": ["x"]}
+    src: dict[str, Any] = {
+        "type": "object",
+        "properties": {"x": {"type": "string"}},
+        "required": ["x"],
+    }
     out = adapter.to_tool_schema(src)
     out["properties"]["x"]["type"] = "integer"
     out["required"].append("y")

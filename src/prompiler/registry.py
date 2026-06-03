@@ -36,9 +36,18 @@ the ``register`` / ``get`` primitives defined here.
 from __future__ import annotations
 
 import re
-from typing import Final
+from pathlib import Path
+from typing import Any, Final
 
-from prompiler.compiler import ArtefactBundle
+from prompiler.compiler import ArtefactBundle, compile_spec
+from prompiler.spec import EntitySpec, load_spec
+
+__all__ = [
+    "Registry",
+    "get",
+    "register_from_dict",
+    "register_from_path",
+]
 
 _NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9_-]+$")
 
@@ -90,3 +99,63 @@ class Registry:
 
     def __contains__(self, name: object) -> bool:
         return name in self._bundles
+
+
+_DEFAULT_REGISTRY: Registry = Registry()
+
+
+def _resolve(registry: Registry | None) -> Registry:
+    return registry if registry is not None else _DEFAULT_REGISTRY
+
+
+def register_from_dict(
+    spec_dict: dict[str, Any], *, registry: Registry | None = None
+) -> ArtefactBundle:
+    """Validate ``spec_dict`` into an ``EntitySpec``, compile, and register.
+
+    The spec's ``name`` field is the registry key (S5 — single source of
+    truth). The ``^[a-z0-9_-]+$`` pattern is enforced at the
+    ``Registry.register`` boundary; no second validation happens here.
+
+    Raises:
+        pydantic.ValidationError: ``spec_dict`` is not a valid ``EntitySpec``.
+        ValueError: spec name fails the registry pattern, or a bundle is
+            already registered under that name (architecture.md L265).
+    """
+    spec = EntitySpec.model_validate(spec_dict)
+    bundle = compile_spec(spec)
+    _resolve(registry).register(spec.name, bundle)
+    return bundle
+
+
+def register_from_path(path: Path | str, *, registry: Registry | None = None) -> ArtefactBundle:
+    """Load a YAML spec from ``path``, compile, and register.
+
+    Delegates parsing/validation to ``prompiler.spec.load_spec``; YAML
+    syntax and schema errors surface as ``SpecLoadError`` with file/line/
+    column populated.
+
+    Raises:
+        SpecLoadError: file missing, unreadable, malformed YAML, or fails
+            ``EntitySpec`` validation.
+        ValueError: spec name fails the registry pattern, or already
+            registered.
+    """
+    spec = load_spec(path)
+    bundle = compile_spec(spec)
+    _resolve(registry).register(spec.name, bundle)
+    return bundle
+
+
+def get(name: str, *, registry: Registry | None = None) -> ArtefactBundle:
+    """Return the bundle registered under ``name``.
+
+    Module-level convenience wrapper around ``Registry.get`` — exposes
+    the L117 public surface so callers can write
+    ``from prompiler.registry import get``.
+
+    Raises:
+        KeyError: no bundle registered under ``name`` (LL-004 forbids
+            silent misses).
+    """
+    return _resolve(registry).get(name)
