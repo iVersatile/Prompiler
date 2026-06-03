@@ -154,9 +154,9 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 **Tasks**
 
-- In-process registry (`prompiler.registry`).
-- File-system discovery (scan `prompts/`).
-- Programmatic registration.
+- [x] In-process registry (`prompiler.registry`).
+- [x] File-system discovery (scan `prompts/`).
+- [x] Programmatic registration.
 - `run()` / `run_sync()` orchestration: select adapter → call → validate → retry-once-on-validation-error → return typed instance.
 - `run_batch()` with `asyncio.Semaphore` and per-item isolation.
 - Doc-size guardrail (`max_input_tokens` enforcement).
