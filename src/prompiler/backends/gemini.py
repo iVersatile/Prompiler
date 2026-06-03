@@ -31,7 +31,7 @@ from prompiler.backends.observability import (
 from prompiler.backends.retry import RetryPolicy, with_retry
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
-DEFAULT_MODEL = "gemini-1.5-flash"
+DEFAULT_MODEL = "gemini-2.5-flash"
 EXTRACT_TOOL_NAME = "extract"
 EXTRACT_TOOL_DESCRIPTION = "Return structured data matching the provided JSON Schema."
 
