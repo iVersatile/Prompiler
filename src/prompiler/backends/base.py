@@ -43,6 +43,7 @@ class BackendAdapter(Protocol):
         *,
         prompt: str,
         json_schema: dict[str, Any],
+        timeout: float | None = None,
     ) -> dict[str, Any]: ...
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:

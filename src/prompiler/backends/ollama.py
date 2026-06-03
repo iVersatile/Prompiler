@@ -19,18 +19,18 @@ from __future__ import annotations
 
 import copy
 import json
-import time
 from typing import Any
 
 import httpx
 
+from prompiler.backends._pipeline import post_with_retry, truncate_for_error
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
     ObservabilityHook,
     PricingTable,
     emit_call_metrics,
 )
-from prompiler.backends.retry import RetryPolicy, with_retry
+from prompiler.backends.retry import RetryPolicy
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 DEFAULT_MODEL = "llama3.1"
@@ -66,6 +66,7 @@ class OllamaAdapter:
         *,
         prompt: str,
         json_schema: dict[str, Any],
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self._model,
@@ -74,27 +75,25 @@ class OllamaAdapter:
             "stream": False,
         }
 
-        async def _do_post() -> httpx.Response:
-            response = await self._client.post("/api/chat", json=payload)
-            if response.status_code >= 400:
-                raise httpx.HTTPStatusError(
-                    f"Ollama {response.status_code}: {response.text}",
-                    request=response.request,
-                    response=response,
-                )
-            return response
-
-        started = time.perf_counter()
-        response = await with_retry(_do_post, policy=self._retry_policy)
-        latency = time.perf_counter() - started
-        body: dict[str, Any] = response.json()
+        body, latency = await post_with_retry(
+            client=self._client,
+            path="/api/chat",
+            payload=payload,
+            vendor_label="Ollama",
+            retry_policy=self._retry_policy,
+            timeout=timeout,
+        )
         message = body.get("message") or {}
         content = message.get("content")
         if not isinstance(content, str):
-            raise RuntimeError(f"Ollama response missing message.content string: {body!r}")
+            raise RuntimeError(
+                f"Ollama response missing message.content string: {truncate_for_error(body)}"
+            )
         parsed = json.loads(content)
         if not isinstance(parsed, dict):
-            raise RuntimeError(f"Ollama message.content did not decode to dict: {content!r}")
+            raise RuntimeError(
+                f"Ollama message.content did not decode to dict: {truncate_for_error(content)}"
+            )
         await emit_call_metrics(
             hook=self._observability,
             backend="ollama",

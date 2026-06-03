@@ -16,11 +16,11 @@ conforming to the supplied JSON Schema.
 from __future__ import annotations
 
 import copy
-import time
 from typing import Any, cast
 
 import httpx
 
+from prompiler.backends._pipeline import post_with_retry, truncate_for_error
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -28,7 +28,7 @@ from prompiler.backends.observability import (
     PricingTable,
     emit_call_metrics,
 )
-from prompiler.backends.retry import RetryPolicy, with_retry
+from prompiler.backends.retry import RetryPolicy
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com"
 DEFAULT_MODEL = "gemini-2.5-flash"
@@ -124,6 +124,7 @@ class GeminiAdapter:
         *,
         prompt: str,
         json_schema: dict[str, Any],
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
@@ -145,22 +146,14 @@ class GeminiAdapter:
                 }
             },
         }
-        path = f"/v1beta/models/{self._model}:generateContent"
-
-        async def _do_post() -> httpx.Response:
-            response = await self._client.post(path, json=payload)
-            if response.status_code >= 400:
-                raise httpx.HTTPStatusError(
-                    f"Gemini {response.status_code}: {response.text}",
-                    request=response.request,
-                    response=response,
-                )
-            return response
-
-        started = time.perf_counter()
-        response = await with_retry(_do_post, policy=self._retry_policy)
-        latency = time.perf_counter() - started
-        body: dict[str, Any] = response.json()
+        body, latency = await post_with_retry(
+            client=self._client,
+            path=f"/v1beta/models/{self._model}:generateContent",
+            payload=payload,
+            vendor_label="Gemini",
+            retry_policy=self._retry_policy,
+            timeout=timeout,
+        )
         for candidate in body.get("candidates", []):
             content = candidate.get("content") or {}
             for part in content.get("parts", []):
@@ -183,7 +176,8 @@ class GeminiAdapter:
                     )
                     return args
         raise RuntimeError(
-            f"Gemini response missing functionCall for {EXTRACT_TOOL_NAME!r}: {body!r}"
+            f"Gemini response missing functionCall for {EXTRACT_TOOL_NAME!r}: "
+            f"{truncate_for_error(body)}"
         )
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:

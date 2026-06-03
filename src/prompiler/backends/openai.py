@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import copy
 import json
-import time
 from typing import Any
 
 import httpx
 
+from prompiler.backends._pipeline import post_with_retry, truncate_for_error
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -29,7 +29,7 @@ from prompiler.backends.observability import (
     PricingTable,
     emit_call_metrics,
 )
-from prompiler.backends.retry import RetryPolicy, with_retry
+from prompiler.backends.retry import RetryPolicy
 
 OPENAI_BASE_URL = "https://api.openai.com"
 DEFAULT_MODEL = "gpt-4o-mini"
@@ -81,6 +81,7 @@ class OpenAIAdapter:
         *,
         prompt: str,
         json_schema: dict[str, Any],
+        timeout: float | None = None,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "model": self._model,
@@ -101,20 +102,14 @@ class OpenAIAdapter:
             },
         }
 
-        async def _do_post() -> httpx.Response:
-            response = await self._client.post("/v1/chat/completions", json=payload)
-            if response.status_code >= 400:
-                raise httpx.HTTPStatusError(
-                    f"OpenAI {response.status_code}: {response.text}",
-                    request=response.request,
-                    response=response,
-                )
-            return response
-
-        started = time.perf_counter()
-        response = await with_retry(_do_post, policy=self._retry_policy)
-        latency = time.perf_counter() - started
-        body: dict[str, Any] = response.json()
+        body, latency = await post_with_retry(
+            client=self._client,
+            path="/v1/chat/completions",
+            payload=payload,
+            vendor_label="OpenAI",
+            retry_policy=self._retry_policy,
+            timeout=timeout,
+        )
         for choice in body.get("choices", []):
             message = choice.get("message") or {}
             for tool_call in message.get("tool_calls") or []:
@@ -138,7 +133,8 @@ class OpenAIAdapter:
                     )
                     return parsed
         raise RuntimeError(
-            f"OpenAI response missing tool_calls entry for {EXTRACT_TOOL_NAME!r}: {body!r}"
+            f"OpenAI response missing tool_calls entry for {EXTRACT_TOOL_NAME!r}: "
+            f"{truncate_for_error(body)}"
         )
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:

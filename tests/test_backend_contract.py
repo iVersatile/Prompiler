@@ -133,3 +133,27 @@ def test_extract_is_deterministic(adapter: BackendAdapter) -> None:
     first = asyncio.run(adapter.extract(prompt=HAPPY_PATH_PROMPT, json_schema=HAPPY_PATH_SCHEMA))
     second = asyncio.run(adapter.extract(prompt=HAPPY_PATH_PROMPT, json_schema=HAPPY_PATH_SCHEMA))
     assert first == second
+
+
+@pytest.mark.unit
+def test_extract_concurrent_invocations() -> None:
+    # Cassette players are ordered+exhaustive (single-shot), so concurrency
+    # is exercised against MockAdapter only — proves the adapter contract is
+    # safe under asyncio.gather without re-entrancy bugs.
+    adapter = MockAdapter()
+
+    async def _run() -> list[dict[str, Any]]:
+        return await asyncio.gather(
+            *[
+                adapter.extract(prompt=HAPPY_PATH_PROMPT, json_schema=HAPPY_PATH_SCHEMA)
+                for _ in range(5)
+            ]
+        )
+
+    results = asyncio.run(_run())
+    assert len(results) == 5
+    for result in results:
+        assert isinstance(result, dict)
+        for key in HAPPY_PATH_SCHEMA["required"]:
+            assert key in result
+    assert all(r == results[0] for r in results)
