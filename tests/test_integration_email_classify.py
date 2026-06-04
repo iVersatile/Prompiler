@@ -17,6 +17,7 @@ from typing import Any, Final
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from conftest import ScriptedAdapter
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.orchestrator import run
@@ -43,28 +44,6 @@ _EMAIL_SPEC: Final[dict[str, Any]] = {
 }
 
 
-class _ScriptedAdapter:
-    def __init__(self, script: list[dict[str, Any] | Exception]) -> None:
-        self._script: list[dict[str, Any] | Exception] = list(script)
-        self.calls: int = 0
-
-    async def extract(
-        self,
-        *,
-        prompt: str,
-        json_schema: dict[str, Any],
-        timeout: float | None = None,
-    ) -> dict[str, Any]:
-        self.calls += 1
-        head = self._script.pop(0)
-        if isinstance(head, Exception):
-            raise head
-        return head
-
-    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
-        return dict(json_schema)
-
-
 def _register() -> Registry:
     registry = Registry()
     registry.register("email_category", compile_spec(EntitySpec.model_validate(_EMAIL_SPEC)))
@@ -74,7 +53,7 @@ def _register() -> Registry:
 @pytest.mark.integration
 def test_email_classify_happy_path_returns_single_label() -> None:
     registry = _register()
-    adapter = _ScriptedAdapter([{"label": "billing"}])
+    adapter = ScriptedAdapter([{"label": "billing"}])
 
     result = asyncio.run(
         run("email_category", "where is my refund?", backend=adapter, registry=registry)
@@ -88,7 +67,7 @@ def test_email_classify_happy_path_returns_single_label() -> None:
 @pytest.mark.integration
 def test_email_classify_rejects_label_outside_vocabulary() -> None:
     registry = _register()
-    adapter = _ScriptedAdapter([{"label": "marketing"}] * _RETRY_BUDGET)
+    adapter = ScriptedAdapter([{"label": "marketing"}] * _RETRY_BUDGET)
 
     with pytest.raises(ExtractionFailed) as exc_info:
         asyncio.run(run("email_category", "promo blast", backend=adapter, registry=registry))
@@ -102,7 +81,7 @@ def test_email_classify_rejects_label_outside_vocabulary() -> None:
 @pytest.mark.integration
 def test_email_classify_rejects_multi_label_payload_when_single_label_spec() -> None:
     registry = _register()
-    adapter = _ScriptedAdapter([{"labels": ["billing", "sales"]}] * _RETRY_BUDGET)
+    adapter = ScriptedAdapter([{"labels": ["billing", "sales"]}] * _RETRY_BUDGET)
 
     with pytest.raises(ExtractionFailed) as exc_info:
         asyncio.run(run("email_category", "billing or sales?", backend=adapter, registry=registry))

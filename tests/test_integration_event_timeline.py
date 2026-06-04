@@ -20,6 +20,7 @@ from typing import Any, Final
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from conftest import ScriptedAdapter
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.orchestrator import run
@@ -79,28 +80,6 @@ _VALID_PAYLOAD: Final[dict[str, Any]] = {
 }
 
 
-class _ScriptedAdapter:
-    def __init__(self, script: list[dict[str, Any] | Exception]) -> None:
-        self._script: list[dict[str, Any] | Exception] = list(script)
-        self.calls: int = 0
-
-    async def extract(
-        self,
-        *,
-        prompt: str,
-        json_schema: dict[str, Any],
-        timeout: float | None = None,
-    ) -> dict[str, Any]:
-        self.calls += 1
-        head = self._script.pop(0)
-        if isinstance(head, Exception):
-            raise head
-        return head
-
-    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
-        return dict(json_schema)
-
-
 def _register() -> Registry:
     registry = Registry()
     registry.register(
@@ -113,7 +92,7 @@ def _register() -> Registry:
 @pytest.mark.integration
 def test_event_timeline_happy_path_typed_datetimes_and_enum() -> None:
     registry = _register()
-    adapter = _ScriptedAdapter([_VALID_PAYLOAD])
+    adapter = ScriptedAdapter([_VALID_PAYLOAD])
 
     result = asyncio.run(
         run("incident_timeline", "incident body", backend=adapter, registry=registry)
@@ -140,7 +119,7 @@ def test_event_timeline_happy_path_typed_datetimes_and_enum() -> None:
 @pytest.mark.integration
 def test_event_timeline_accepts_empty_array() -> None:
     registry = _register()
-    adapter = _ScriptedAdapter([{"events": []}])
+    adapter = ScriptedAdapter([{"events": []}])
 
     result = asyncio.run(run("incident_timeline", "no events", backend=adapter, registry=registry))
 
@@ -161,7 +140,7 @@ def test_event_timeline_rejects_malformed_timestamp() -> None:
             },
         ],
     }
-    adapter = _ScriptedAdapter([bad] * _RETRY_BUDGET)
+    adapter = ScriptedAdapter([bad] * _RETRY_BUDGET)
 
     with pytest.raises(ExtractionFailed) as exc_info:
         asyncio.run(run("incident_timeline", "bad ts", backend=adapter, registry=registry))
@@ -184,7 +163,7 @@ def test_event_timeline_rejects_out_of_vocab_event_type() -> None:
             },
         ],
     }
-    adapter = _ScriptedAdapter([bad] * _RETRY_BUDGET)
+    adapter = ScriptedAdapter([bad] * _RETRY_BUDGET)
 
     with pytest.raises(ExtractionFailed) as exc_info:
         asyncio.run(run("incident_timeline", "bad enum", backend=adapter, registry=registry))
