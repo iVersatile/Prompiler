@@ -18,6 +18,8 @@ Enforcement: the `branch-guard` hook at the `pre-commit` stage of `.pre-commit-c
 
 Escape hatch: `ALLOW_MAIN_COMMIT=1 git commit ...` bypasses the gate for declared emergency fixes (hotfixes, branch-protection bypasses). The escape hatch is intentional, audited via git history, and must not be used for routine work.
 
+CI exemption: when `CI=true` or `GITHUB_ACTIONS=true` is set in the environment, `branch-guard` no-ops with a stderr notice. GitHub Actions runs `pre-commit run --all-files` on the pushed ref, which is `main` after every merge — the "no commits on `main`" rule is meaningless there (the commit already exists) and would otherwise turn every post-merge CI run red. The exemption is environment-scoped only; local commits to `main`/`master` remain blocked.
+
 Rationale: untracked files survive `git checkout` between branches. The §3 pre-push working-tree-clean gate only catches *dirty* trees — it does not catch untracked work that gets staged and committed onto the wrong branch. Without this gate, an agent that lands on `main` between phases can silently accumulate code commits there.
 
 ### 1.1 Steps
