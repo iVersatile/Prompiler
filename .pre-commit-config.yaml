@@ -20,6 +20,20 @@ default_stages: [pre-commit]
 
 repos:
   # ---------------------------------------------------------------------------
+  # §1.0 Feature-branch precondition — refuse to commit on main/master unless
+  # ALLOW_MAIN_COMMIT=1 is set. Runs first so a wrong-branch commit fails fast
+  # before the heavier ruff/mypy/pytest gates burn CPU.
+  # ---------------------------------------------------------------------------
+
+  - repo: local
+    hooks:
+      - id: branch-guard
+        name: branch guard (block main/master unless ALLOW_MAIN_COMMIT=1)
+        entry: python3 scripts/check_branch_guard.py
+        language: system
+        pass_filenames: false
+
+  # ---------------------------------------------------------------------------
   # §2 Pre-commit gate — must pass before any commit lands.
   # ---------------------------------------------------------------------------
 
@@ -30,35 +44,30 @@ repos:
         entry: uv run ruff check src/ tests/
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
       - id: ruff-format-check
         name: ruff format --check
         entry: uv run ruff format --check src/ tests/
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
       - id: mypy
         name: mypy src/prompiler
         entry: uv run mypy src/prompiler
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
       - id: pytest-unit
         name: pytest (unit tier, coverage >= 80%)
         entry: uv run pytest tests/ -m unit --cov=prompiler --cov-fail-under=80 -q
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
       - id: prompiler-validate
         name: "prompiler validate prompts/ (P0 stub: existence check)"
         entry: uv run prompiler validate prompts/
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
   # ---------------------------------------------------------------------------
   # §8 Secret scanning — runs on every commit AND on push (with --diff range).
@@ -71,7 +80,6 @@ repos:
         entry: python3 scripts/scan_secrets.py --staged
         language: system
         pass_filenames: false
-        stages: [pre-commit]
 
       - id: scan-secrets-push
         name: scan secrets (push range)
