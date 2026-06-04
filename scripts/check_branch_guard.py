@@ -13,9 +13,15 @@ Escape hatch: set `ALLOW_MAIN_COMMIT=1` in the environment for emergency
 direct-to-main fixes (hotfixes, branch-protection bypasses, etc.). The escape
 hatch is intentional and audited via git history.
 
+CI exemption: when `CI=true` or `GITHUB_ACTIONS=true`, the gate no-ops with a
+stderr notice. Rationale: GitHub Actions runs `pre-commit run --all-files` on
+the pushed ref, which is `main` after a merge — the gate's "no commits on
+main" rule is meaningless there (the commit already happened) and would
+otherwise turn every post-merge CI run red.
+
 Exit codes:
-  0  on a non-main/master branch, or ALLOW_MAIN_COMMIT=1 set
-  1  on main/master without ALLOW_MAIN_COMMIT=1
+  0  on a non-main/master branch, ALLOW_MAIN_COMMIT=1, or CI env detected
+  1  on main/master without ALLOW_MAIN_COMMIT=1 (local commits only)
   2  invocation error
 """
 
@@ -27,6 +33,11 @@ import sys
 
 _BLOCKED_BRANCHES: frozenset[str] = frozenset({"main", "master"})
 _ESCAPE_HATCH_ENV: str = "ALLOW_MAIN_COMMIT"
+_CI_ENV_VARS: tuple[str, ...] = ("CI", "GITHUB_ACTIONS")
+
+
+def _running_in_ci() -> bool:
+    return any(os.environ.get(var, "").strip().lower() == "true" for var in _CI_ENV_VARS)
 
 
 def main() -> int:
@@ -48,6 +59,13 @@ def main() -> int:
 
     branch = result.stdout.strip()
     if branch not in _BLOCKED_BRANCHES:
+        return 0
+
+    if _running_in_ci():
+        sys.stderr.write(
+            f"check_branch_guard: skipping on `{branch}` because CI env detected "
+            f"({', '.join(_CI_ENV_VARS)}). Local commits to main/master are still blocked.\n"
+        )
         return 0
 
     if os.environ.get(_ESCAPE_HATCH_ENV, "").strip() == "1":
