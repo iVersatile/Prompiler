@@ -20,6 +20,7 @@ from typing import Any, Final
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from conftest import ScriptedAdapter
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.orchestrator import run
@@ -72,28 +73,6 @@ _VALID_PAYLOAD: Final[dict[str, Any]] = {
 }
 
 
-class _ScriptedAdapter:
-    def __init__(self, script: list[dict[str, Any] | Exception]) -> None:
-        self._script: list[dict[str, Any] | Exception] = list(script)
-        self.calls: int = 0
-
-    async def extract(
-        self,
-        *,
-        prompt: str,
-        json_schema: dict[str, Any],
-        timeout: float | None = None,
-    ) -> dict[str, Any]:
-        self.calls += 1
-        head = self._script.pop(0)
-        if isinstance(head, Exception):
-            raise head
-        return head
-
-    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
-        return dict(json_schema)
-
-
 def _register() -> Registry:
     registry = Registry()
     registry.register(
@@ -106,7 +85,7 @@ def _register() -> Registry:
 @pytest.mark.integration
 def test_contract_obligations_happy_path_typed_dates_and_decimals() -> None:
     registry = _register()
-    adapter = _ScriptedAdapter([_VALID_PAYLOAD])
+    adapter = ScriptedAdapter([_VALID_PAYLOAD])
 
     result = asyncio.run(
         run("contract_obligations", "contract body", backend=adapter, registry=registry)
@@ -130,7 +109,7 @@ def test_contract_obligations_happy_path_typed_dates_and_decimals() -> None:
 @pytest.mark.integration
 def test_contract_obligations_accepts_empty_array() -> None:
     registry = _register()
-    adapter = _ScriptedAdapter([{"obligations": []}])
+    adapter = ScriptedAdapter([{"obligations": []}])
 
     result = asyncio.run(
         run("contract_obligations", "no obligations", backend=adapter, registry=registry)
@@ -153,7 +132,7 @@ def test_contract_obligations_rejects_malformed_deadline() -> None:
             },
         ],
     }
-    adapter = _ScriptedAdapter([bad] * _RETRY_BUDGET)
+    adapter = ScriptedAdapter([bad] * _RETRY_BUDGET)
 
     with pytest.raises(ExtractionFailed) as exc_info:
         asyncio.run(run("contract_obligations", "bad deadline", backend=adapter, registry=registry))
