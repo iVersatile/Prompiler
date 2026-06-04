@@ -278,3 +278,79 @@ def test_eval_usage_frozen() -> None:
     usage = EvalUsage(calls=1, prompt_tokens=10, completion_tokens=5, cost_usd=0.0)
     with pytest.raises(dataclasses.FrozenInstanceError):
         usage.calls = 2  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# Fuzzy fallback (L189) — token-set Jaccard rescue on exact-F1=0 cases
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_fuzzy_metrics_none_when_no_exact_failures() -> None:
+    # Every case scores exact-F1 > 0 -> fuzzy fallback never fires -> None.
+    registry = _register("books")
+    adapter = ScriptedAdapter([{"title": "Dune", "author": "Herbert"}])
+    cases = [_case("c1", title="Dune", author="Herbert")]
+
+    result = run_eval("books", cases, backend=adapter, registry=registry)
+
+    assert result.fuzzy_metrics is None
+
+
+@pytest.mark.unit
+def test_fuzzy_fallback_rescues_near_miss_case() -> None:
+    # Both fields are token-set near-misses (reorder / punctuation drift) but
+    # differ exactly -> exact case-F1 == 0, which arms the fuzzy fallback.
+    registry = _register("books")
+    adapter = ScriptedAdapter([{"title": "Herbert, Frank", "author": "press  dune."}])
+    cases = [_case("c1", title="Frank Herbert", author="Dune Press")]
+
+    result = run_eval("books", cases, backend=adapter, registry=registry)
+
+    # Exact metrics stay untouched: both fields mismatch -> 0 TP, 2 FP, 2 FN.
+    assert result.metrics.tp == 0
+    assert result.metrics.fp == 2
+    assert result.metrics.fn == 2
+    assert result.metrics.f1 == 0.0
+    # Fuzzy fallback upgrades both near-misses to match.
+    assert result.fuzzy_metrics is not None
+    assert result.fuzzy_metrics.tp == 2
+    assert result.fuzzy_metrics.fp == 0
+    assert result.fuzzy_metrics.fn == 0
+    assert result.fuzzy_metrics.f1 == 1.0
+
+
+@pytest.mark.unit
+def test_fuzzy_fallback_skips_cases_with_any_exact_match() -> None:
+    # Case exact-F1 > 0 (one field matches) -> fallback does NOT fire for it,
+    # so the genuine mismatch stays a mismatch even though it is a near-miss.
+    registry = _register("books")
+    adapter = ScriptedAdapter([{"title": "Dune", "author": "Herbert, Frank"}])
+    cases = [_case("c1", title="Dune", author="Frank Herbert")]
+
+    result = run_eval("books", cases, backend=adapter, registry=registry)
+
+    assert result.metrics.tp == 1
+    # Fuzzy metrics mirror exact here: the near-miss author is not rescued
+    # because its case already had a true positive (exact-F1 > 0).
+    assert result.fuzzy_metrics is not None
+    assert result.fuzzy_metrics.tp == 1
+    assert result.fuzzy_metrics.fp == 1
+    assert result.fuzzy_metrics.fn == 1
+
+
+@pytest.mark.unit
+def test_fuzzy_fallback_keeps_genuine_mismatch() -> None:
+    # exact-F1 == 0 arms the fallback, but the prediction is a genuine mismatch
+    # (jaccard < threshold) -> stays mismatch, fuzzy metrics == exact metrics.
+    registry = _register("books")
+    adapter = ScriptedAdapter([{"title": "Globex", "author": "Acme"}])
+    cases = [_case("c1", title="Dune", author="Herbert")]
+
+    result = run_eval("books", cases, backend=adapter, registry=registry)
+
+    assert result.metrics.tp == 0
+    assert result.fuzzy_metrics is not None
+    assert result.fuzzy_metrics.tp == 0
+    assert result.fuzzy_metrics.fp == 2
+    assert result.fuzzy_metrics.fn == 2

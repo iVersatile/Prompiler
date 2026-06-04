@@ -85,13 +85,31 @@ def test_spec_hash_not_prefixed() -> None:
 
 
 def test_aggregate_mirrors_metrics() -> None:
-    result = _result()
+    base = _result()
+    fuzzy = aggregate([("name", "match"), ("name", "match"), ("age", "missing")])
+    result = EvalResult(cases=base.cases, metrics=base.metrics, fuzzy_metrics=fuzzy)
     report = build_report(result, **_META)
     assert report["aggregate"] == {
         "precision": result.metrics.precision,
         "recall": result.metrics.recall,
         "f1": result.metrics.f1,
+        "exact_f1": result.metrics.f1,
+        "fuzzy_f1": fuzzy.f1,
     }
+
+
+def test_aggregate_fuzzy_f1_null_when_exact_perfect() -> None:
+    cases = (
+        CaseResult(
+            name="case-ok",
+            diffs=(FieldDiff(field="name", expected="Ada", predicted="Ada", status="match"),),
+        ),
+    )
+    result = EvalResult(cases=cases, metrics=aggregate([("name", "match")]))
+    assert result.fuzzy_metrics is None
+    report = build_report(result, **_META)
+    assert report["aggregate"]["exact_f1"] == result.metrics.f1
+    assert report["aggregate"]["fuzzy_f1"] is None
 
 
 def test_per_field_uses_short_keys() -> None:

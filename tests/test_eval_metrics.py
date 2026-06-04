@@ -15,7 +15,7 @@ import dataclasses
 
 import pytest
 
-from prompiler.eval.metrics import FieldScore, Metrics, aggregate, prf
+from prompiler.eval.metrics import FieldScore, Metrics, aggregate, jaccard, prf
 
 # ---------------------------------------------------------------------------
 # prf()
@@ -93,6 +93,49 @@ def test_aggregate_per_field_counts() -> None:
     assert score.fp == 0
     assert score.recall == pytest.approx(2 / 3)
     assert score.precision == 1.0
+
+
+# ---------------------------------------------------------------------------
+# jaccard() — token-set similarity for the fuzzy fallback (L189)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_jaccard_identical_is_one() -> None:
+    assert jaccard("Acme Corporation", "Acme Corporation") == 1.0
+
+
+@pytest.mark.unit
+def test_jaccard_whitespace_and_punctuation_near_miss() -> None:
+    # trailing whitespace + punctuation drift + case must still clear 0.85
+    assert jaccard("Acme Corp", "  acme corp.  ") >= 0.85
+
+
+@pytest.mark.unit
+def test_jaccard_token_reorder_near_miss() -> None:
+    # token-set ignores order -> reordered tokens score 1.0
+    assert jaccard("Herbert, Frank", "Frank Herbert") >= 0.85
+
+
+@pytest.mark.unit
+def test_jaccard_genuine_mismatch_below_threshold() -> None:
+    assert jaccard("Acme", "Globex") < 0.85
+
+
+@pytest.mark.unit
+def test_jaccard_both_empty_is_zero() -> None:
+    assert jaccard("", "") == 0.0
+
+
+@pytest.mark.unit
+def test_jaccard_one_empty_is_zero() -> None:
+    assert jaccard("Acme", "") == 0.0
+
+
+@pytest.mark.unit
+def test_jaccard_partial_overlap() -> None:
+    # {acme, corp} vs {acme, llc} -> intersection 1, union 3 -> 1/3
+    assert jaccard("Acme Corp", "Acme LLC") == pytest.approx(1 / 3)
 
 
 # ---------------------------------------------------------------------------

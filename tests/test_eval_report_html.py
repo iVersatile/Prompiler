@@ -163,6 +163,37 @@ def test_none_predicted_renders_em_dash() -> None:
     assert "predicted —" in html
 
 
+def test_aggregate_renders_exact_and_fuzzy_f1_cards() -> None:
+    html = build_html_report(_report())
+    assert ">Exact F1<" in html
+    assert ">Fuzzy F1<" in html
+
+
+def test_fuzzy_f1_card_em_dash_when_null() -> None:
+    report = _report()
+    assert report["aggregate"]["fuzzy_f1"] is None  # type: ignore[index]
+    html = build_html_report(report)
+    fuzzy_block = html.split(">Fuzzy F1<", 1)[1]
+    assert fuzzy_block.split('class="value">', 1)[1].startswith("—")
+
+
+def test_fuzzy_f1_card_renders_value_when_present() -> None:
+    cases = (
+        CaseResult(
+            name="case-bad",
+            diffs=(FieldDiff(field="name", expected="Bob", predicted="Bo", status="mismatch"),),
+        ),
+    )
+    result = EvalResult(
+        cases=cases,
+        metrics=aggregate([("name", "mismatch")]),
+        fuzzy_metrics=aggregate([("name", "match")]),
+    )
+    html = build_html_report(build_report(result, **_META))  # type: ignore[arg-type]
+    fuzzy_block = html.split(">Fuzzy F1<", 1)[1]
+    assert fuzzy_block.split('class="value">', 1)[1].startswith("1.0000")
+
+
 def test_write_html_report_round_trip(tmp_path: Path) -> None:
     report = _report()
     out = tmp_path / "eval-report.html"

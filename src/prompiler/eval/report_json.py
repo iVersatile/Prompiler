@@ -89,6 +89,8 @@ def build_report(
             "precision": metrics.precision,
             "recall": metrics.recall,
             "f1": metrics.f1,
+            "exact_f1": metrics.f1,
+            "fuzzy_f1": (None if result.fuzzy_metrics is None else result.fuzzy_metrics.f1),
         },
         "per_field": {
             field: {"p": score.precision, "r": score.recall, "f1": score.f1}

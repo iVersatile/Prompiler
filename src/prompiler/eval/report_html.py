@@ -174,15 +174,18 @@ def _render_meta(report: dict[str, Any]) -> str:
 
 def _render_aggregate(report: dict[str, Any]) -> str:
     agg = report.get("aggregate") or {}
+    fuzzy = agg.get("fuzzy_f1")
     cards = [
-        ("Precision", agg.get("precision", 0.0)),
-        ("Recall", agg.get("recall", 0.0)),
-        ("F1", agg.get("f1", 0.0)),
+        ("Precision", _fmt(float(agg.get("precision", 0.0)))),
+        ("Recall", _fmt(float(agg.get("recall", 0.0)))),
+        ("F1", _fmt(float(agg.get("f1", 0.0)))),
+        ("Exact F1", _fmt(float(agg.get("exact_f1", agg.get("f1", 0.0))))),
+        ("Fuzzy F1", _esc(fuzzy) if fuzzy is None else _fmt(float(fuzzy))),
     ]
     body = "\n".join(
         f'      <div class="card">\n'
         f'        <div class="label">{_esc(label)}</div>\n'
-        f'        <div class="value">{_fmt(float(value))}</div>\n'
+        f'        <div class="value">{value}</div>\n'
         f"      </div>"
         for label, value in cards
     )

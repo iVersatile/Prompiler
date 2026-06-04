@@ -23,9 +23,11 @@ from typing import Any
 
 from prompiler.backends.observability import BackendCallMetrics
 from prompiler.eval.fixtures import FixtureCase
-from prompiler.eval.metrics import DiffStatus, Metrics, aggregate
+from prompiler.eval.metrics import DiffStatus, Metrics, aggregate, jaccard
 from prompiler.runtime.errors import PrompilerError
 from prompiler.runtime.orchestrator import run_sync
+
+FUZZY_THRESHOLD = 0.85
 
 
 class CapturingHook:
@@ -89,6 +91,7 @@ class EvalResult:
     cases: tuple[CaseResult, ...]
     metrics: Metrics
     usage: EvalUsage | None = None
+    fuzzy_metrics: Metrics | None = None
 
 
 def _norm(value: Any) -> str:
@@ -122,6 +125,36 @@ def _error_diffs(expected: Mapping[str, Any]) -> tuple[FieldDiff, ...]:
         FieldDiff(field=field, expected=str(exp_val), predicted=None, status="missing")
         for field, exp_val in expected.items()
     )
+
+
+def _fuzzy_status(diff: FieldDiff) -> DiffStatus:
+    """Upgrade a mismatch to match when its token-set Jaccard clears threshold."""
+    if (
+        diff.status == "mismatch"
+        and diff.predicted is not None
+        and jaccard(diff.expected, diff.predicted) >= FUZZY_THRESHOLD
+    ):
+        return "match"
+    return diff.status
+
+
+def _fuzzy_observations(
+    case_results: Sequence[CaseResult],
+) -> list[tuple[str, DiffStatus]]:
+    """Build the fuzzy observation stream, arming the fallback per case.
+
+    The fuzzy rescue fires only for a case whose *exact* F1 is 0.0 — i.e. the
+    case had no true positive. Cases that already landed a match keep their
+    exact diffs untouched so the fuzzy column never masks a partial hit.
+    """
+    fuzzy_obs: list[tuple[str, DiffStatus]] = []
+    for case in case_results:
+        case_exact = aggregate((d.field, d.status) for d in case.diffs)
+        if case_exact.f1 == 0.0:
+            fuzzy_obs.extend((d.field, _fuzzy_status(d)) for d in case.diffs)
+        else:
+            fuzzy_obs.extend((d.field, d.status) for d in case.diffs)
+    return fuzzy_obs
 
 
 def _summarize_usage(hook: CapturingHook) -> EvalUsage:
@@ -166,4 +199,8 @@ def run_eval(
         observations.extend((d.field, d.status) for d in case_results[-1].diffs)
     metrics = aggregate(observations)
     usage = _summarize_usage(metrics_hook) if metrics_hook is not None else None
-    return EvalResult(cases=tuple(case_results), metrics=metrics, usage=usage)
+    any_failure = any(d.status != "match" for c in case_results for d in c.diffs)
+    fuzzy_metrics = aggregate(_fuzzy_observations(case_results)) if any_failure else None
+    return EvalResult(
+        cases=tuple(case_results), metrics=metrics, usage=usage, fuzzy_metrics=fuzzy_metrics
+    )

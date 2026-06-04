@@ -15,12 +15,35 @@ poison the aggregate.
 
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Literal
 
 DiffStatus = Literal["match", "mismatch", "missing", "extra"]
+
+_TOKEN_SPLIT = re.compile(r"[^0-9a-z]+")
+
+
+def _tokenize(value: str) -> frozenset[str]:
+    """Lowercase and split on non-alphanumeric runs into a token set."""
+    return frozenset(t for t in _TOKEN_SPLIT.split(value.lower()) if t)
+
+
+def jaccard(a: str, b: str) -> float:
+    """Token-set Jaccard similarity in [0.0, 1.0]; empty operands score 0.0.
+
+    Order-insensitive and punctuation/whitespace tolerant. Used as the
+    zero-dependency fuzzy fallback for near-miss eval matching (L189).
+    """
+    tokens_a = _tokenize(a)
+    tokens_b = _tokenize(b)
+    if not tokens_a or not tokens_b:
+        return 0.0
+    intersection = len(tokens_a & tokens_b)
+    union = len(tokens_a | tokens_b)
+    return intersection / union
 
 
 @dataclass(frozen=True)
