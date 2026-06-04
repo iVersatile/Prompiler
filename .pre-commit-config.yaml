@@ -70,23 +70,40 @@ repos:
         pass_filenames: false
 
   # ---------------------------------------------------------------------------
-  # §8 Secret scanning — runs on every commit AND on push (with --diff range).
+  # §8 Secret scanning — defence-in-depth, two independent layers.
+  #
+  # Layer 1: scripts/scan_secrets.py — repo-tuned regexes + cassette redaction
+  # awareness. Knows about our fixtures/, cassettes/, and the test scaffolding
+  # that legitimately contains pseudo-secret strings.
+  #
+  # Layer 2: gitleaks — upstream provider rule pack (AWS, GCP, Stripe, GitHub
+  # PATs, Slack tokens, generic high-entropy patterns, etc.). Catches anything
+  # our local regex set misses.
+  #
+  # Both layers run on every commit AND on push (with --diff range for Layer 1).
+  # Either one blocking is sufficient to refuse the commit/push.
   # ---------------------------------------------------------------------------
 
   - repo: local
     hooks:
       - id: scan-secrets-staged
-        name: scan secrets (staged changes)
+        name: scan secrets (staged changes, Layer 1 — repo-tuned)
         entry: python3 scripts/scan_secrets.py --staged
         language: system
         pass_filenames: false
 
       - id: scan-secrets-push
-        name: scan secrets (push range)
+        name: scan secrets (push range, Layer 1 — repo-tuned)
         entry: python3 scripts/scan_secrets.py --pre-push
         language: system
         pass_filenames: false
         stages: [pre-push]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+        name: gitleaks (Layer 2 — upstream provider rule pack)
 
   # ---------------------------------------------------------------------------
   # §3 Pre-push gate — clean working tree only. Pytest is NOT re-run; §2
