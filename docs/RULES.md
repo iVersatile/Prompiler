@@ -195,7 +195,12 @@ Before marking a phase complete in `docs/PLAN.md`:
 - No credentials echoed, logged, or printed to stdout/stderr.
 - All adapter wire bodies in cassettes must be redacted of auth headers before commit. The `pre-commit` cassette-redaction hook runs first, but cross-check on review.
 
-A regex-based secret scanner enforces the first and last bullets at commit and push time — see `scripts/scan_secrets.py` and `.pre-commit-config.yaml`.
+Secret scanning runs in **two independent layers** at commit and push time:
+
+- **Layer 1 — `scripts/scan_secrets.py`:** repo-tuned regexes that know about our `fixtures/`, `cassettes/`, and test scaffolding (legitimate pseudo-secret strings).
+- **Layer 2 — gitleaks (`v8.30.1`, pinned in `.pre-commit-config.yaml`):** upstream provider rule pack (AWS, GCP, Stripe, GitHub PATs, Slack tokens, generic high-entropy). Catches what Layer 1's repo-tuned set misses.
+
+Either layer blocking is sufficient to refuse the commit/push. Bumping the gitleaks `rev:` requires re-running `uv run pre-commit run --all-files gitleaks` against the current tree before the bump can land.
 
 ---
 
