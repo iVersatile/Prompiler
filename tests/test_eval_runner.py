@@ -18,9 +18,17 @@ import dataclasses
 import pytest
 
 from conftest import ScriptedAdapter
+from prompiler.backends.observability import PricingEntry, PricingTable
 from prompiler.compiler import compile_spec
 from prompiler.eval.fixtures import FixtureCase
-from prompiler.eval.runner import CaseResult, EvalResult, FieldDiff, run_eval
+from prompiler.eval.runner import (
+    CapturingHook,
+    CaseResult,
+    EvalResult,
+    EvalUsage,
+    FieldDiff,
+    run_eval,
+)
 from prompiler.runtime.errors import AdapterError
 from prompiler.runtime.registry import Registry
 from prompiler.spec import EntitySpec
@@ -202,3 +210,71 @@ def test_field_diff_frozen() -> None:
 def test_case_result_default_error_none() -> None:
     result = CaseResult(name="c1", diffs=())
     assert result.error is None
+
+
+# ---------------------------------------------------------------------------
+# Cost + token accounting (opt-in via metrics_hook)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_usage_none_without_metrics_hook() -> None:
+    registry = _register("books")
+    adapter = ScriptedAdapter([{"title": "Dune", "author": "Herbert"}])
+    cases = [_case("c1", title="Dune", author="Herbert")]
+
+    result = run_eval("books", cases, backend=adapter, registry=registry)
+
+    assert result.usage is None
+
+
+@pytest.mark.unit
+def test_usage_totals_token_counts() -> None:
+    registry = _register("books")
+    hook = CapturingHook()
+    adapter = ScriptedAdapter(
+        [
+            {"title": "Dune", "author": "Herbert"},
+            {"title": "Hyperion", "author": "Simmons"},
+        ],
+        observability=hook,
+        tokens=[(100, 50), (200, 75)],
+    )
+    cases = [
+        _case("c1", title="Dune", author="Herbert"),
+        _case("c2", title="Hyperion", author="Simmons"),
+    ]
+
+    result = run_eval("books", cases, backend=adapter, registry=registry, metrics_hook=hook)
+
+    assert result.usage is not None
+    assert result.usage.calls == 2
+    assert result.usage.prompt_tokens == 300
+    assert result.usage.completion_tokens == 125
+
+
+@pytest.mark.unit
+def test_usage_sums_cost_from_pricing_table() -> None:
+    registry = _register("books")
+    pricing = PricingTable(rates={("scripted", "test-model"): PricingEntry(2.0, 6.0)})
+    hook = CapturingHook()
+    adapter = ScriptedAdapter(
+        [{"title": "Dune", "author": "Herbert"}],
+        observability=hook,
+        pricing=pricing,
+        tokens=[(100, 50)],
+    )
+    cases = [_case("c1", title="Dune", author="Herbert")]
+
+    result = run_eval("books", cases, backend=adapter, registry=registry, metrics_hook=hook)
+
+    # 100 * 2.0/1e6 + 50 * 6.0/1e6 = 0.0002 + 0.0003 = 0.0005
+    assert result.usage is not None
+    assert result.usage.cost_usd == pytest.approx(0.0005)
+
+
+@pytest.mark.unit
+def test_eval_usage_frozen() -> None:
+    usage = EvalUsage(calls=1, prompt_tokens=10, completion_tokens=5, cost_usd=0.0)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        usage.calls = 2  # type: ignore[misc]

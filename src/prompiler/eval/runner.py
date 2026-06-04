@@ -21,10 +21,32 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from prompiler.backends.observability import BackendCallMetrics
 from prompiler.eval.fixtures import FixtureCase
 from prompiler.eval.metrics import DiffStatus, Metrics, aggregate
 from prompiler.runtime.errors import PrompilerError
 from prompiler.runtime.orchestrator import run_sync
+
+
+class CapturingHook:
+    """Observability sink that records every ``BackendCallMetrics`` it receives.
+
+    Wire one instance into the backend at construction *and* pass the same
+    instance to ``run_eval`` as ``metrics_hook``. After the run, the runner
+    folds the captured per-call metrics into ``EvalResult.usage``.
+
+    Satisfies the ``ObservabilityHook`` Protocol structurally — no inheritance.
+    """
+
+    def __init__(self) -> None:
+        self._calls: list[BackendCallMetrics] = []
+
+    async def on_call(self, metrics: BackendCallMetrics) -> None:
+        self._calls.append(metrics)
+
+    @property
+    def calls(self) -> tuple[BackendCallMetrics, ...]:
+        return tuple(self._calls)
 
 
 @dataclass(frozen=True)
@@ -47,11 +69,26 @@ class CaseResult:
 
 
 @dataclass(frozen=True)
+class EvalUsage:
+    """Aggregate backend cost/token totals folded from captured call metrics."""
+
+    calls: int
+    prompt_tokens: int
+    completion_tokens: int
+    cost_usd: float
+
+
+@dataclass(frozen=True)
 class EvalResult:
-    """All case results plus the aggregate metrics over every observation."""
+    """All case results plus the aggregate metrics over every observation.
+
+    ``usage`` is ``None`` unless the caller wired a ``CapturingHook`` into the
+    backend and passed it as ``metrics_hook`` — cost/token accounting is opt-in.
+    """
 
     cases: tuple[CaseResult, ...]
     metrics: Metrics
+    usage: EvalUsage | None = None
 
 
 def _norm(value: Any) -> str:
@@ -87,6 +124,16 @@ def _error_diffs(expected: Mapping[str, Any]) -> tuple[FieldDiff, ...]:
     )
 
 
+def _summarize_usage(hook: CapturingHook) -> EvalUsage:
+    calls = hook.calls
+    return EvalUsage(
+        calls=len(calls),
+        prompt_tokens=sum(c.prompt_tokens for c in calls),
+        completion_tokens=sum(c.completion_tokens for c in calls),
+        cost_usd=sum(c.cost_usd for c in calls),
+    )
+
+
 def run_eval(
     spec_name: str,
     cases: Sequence[FixtureCase],
@@ -94,8 +141,14 @@ def run_eval(
     backend: Any,
     registry: Any = None,
     timeout: float | None = None,
+    metrics_hook: CapturingHook | None = None,
 ) -> EvalResult:
-    """Run every fixture case through extraction and aggregate the metrics."""
+    """Run every fixture case through extraction and aggregate the metrics.
+
+    Pass ``metrics_hook`` — the same ``CapturingHook`` instance wired into the
+    backend at construction — to fold per-call cost/token metrics into
+    ``EvalResult.usage``. When omitted, ``usage`` is ``None``.
+    """
     case_results: list[CaseResult] = []
     observations: list[tuple[str, DiffStatus]] = []
     for case in cases:
@@ -112,4 +165,5 @@ def run_eval(
             case_results.append(CaseResult(name=case.name, diffs=diffs))
         observations.extend((d.field, d.status) for d in case_results[-1].diffs)
     metrics = aggregate(observations)
-    return EvalResult(cases=tuple(case_results), metrics=metrics)
+    usage = _summarize_usage(metrics_hook) if metrics_hook is not None else None
+    return EvalResult(cases=tuple(case_results), metrics=metrics, usage=usage)
