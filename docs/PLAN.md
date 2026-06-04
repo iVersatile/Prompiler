@@ -129,7 +129,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] Per-adapter `to_tool_schema(json_schema)` projection (handle backend-specific degradation: no `pattern`, no decimals, depth limits).
 - [x] Credential provider abstraction + `EnvVarProvider` + `GoogleADCProvider`.
 - [x] Retry policy (transient errors only) with exponential backoff.
-- [x] Per-call observability hook (latency, tokens, cost estimate via pricing table).
+- [ ] Per-call observability hook (latency, tokens, cost estimate via pricing table). **Deferred to P7 (CLI + Observability).** Observability — structured per-stage markers, cost estimate via `pricing/v1.json`, and `prompiler stats` — is already scoped under P7. This checkbox was misplaced P7 scope; no code landed in P2. See LL-007.
 - Test infrastructure:
   - [x] Mock adapter for unit tests.
   - [x] Cassette recorder/player for paid backends (VCR-style).
