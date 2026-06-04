@@ -220,7 +220,7 @@ Wrapper script: `scripts/local_test.py`.
 2. `uv run prompiler codegen <each example spec> -o <dir>` exits 0 and writes a single deterministic Python module under `<dir>`.
 3. Determinism: each example spec is rendered twice into separate output directories; the two generated modules must be byte-identical.
 4. MCP healthz: `uv run prompiler serve --transport http --host 127.0.0.1 --port 0` runs in the background; the script discovers the bound port from the log line, curls `/healthz`, asserts `200 {"status":"ok"}`, then terminates the server.
-5. Structured logging: **P2-deferred.** `configure_logging()` ships in P1, but per-stage / lifecycle log markers (`codegen.start`, `codegen.done`, `stage=<name>`) land alongside BackendAdapter instrumentation in P2. The local test gate reports this check as SKIP until then.
+5. Structured logging: **P7-deferred.** `configure_logging()` ships in P1, but per-stage / lifecycle log markers (`codegen.start`, `codegen.done`, `stage=<name>`) never landed in P2 — they belong to P7 (CLI + Observability) alongside cost estimate and `prompiler stats`. The local test gate reports this check as SKIP until then. See LL-007.
 
 The local test gate verifies expected behaviour against committed example specs before a release. It catches regressions that pass unit tests but break end-to-end CLI or MCP behaviour.
 
