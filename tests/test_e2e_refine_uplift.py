@@ -20,6 +20,7 @@ enum/date/decimal ``str()`` ambiguity in the differ.
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any, Final
 
 import pytest
@@ -123,16 +124,24 @@ _TUTOR_DIFF: Final[str] = (
 )
 
 
-class _ScriptedAdapter:
-    """Prompt-ignoring backend: returns scripted payloads in order.
+# The marker the refined instruction injects. The prompt-sensitive adapter keys
+# on this substring so its output is a *function of the prompt content*, not of
+# call order — that is what upgrades the test from choreography to causality.
+_REFINED_MARKER: Final[str] = "exact vendor name and invoice number verbatim"
 
-    Local to this test (mirrors the sibling integration test) so the E2E case
-    owns its own fault-free, deterministic double rather than importing one.
+
+class _PromptSensitiveAdapter:
+    """Causal backend: output is a function of the prompt it receives.
+
+    Returns the gold payload iff the assembled prompt carries the refined
+    instruction (``_REFINED_MARKER``); otherwise the degraded payload. A single
+    instance is reused across both ``run_eval`` calls, so the F1 swing can only
+    come from the prompt changing — not from a scripted call sequence (which is
+    what the prompt-IGNORING double in the sibling integration test does).
     """
 
-    def __init__(self, script: list[dict[str, Any]]) -> None:
-        self._script: list[dict[str, Any]] = list(script)
-        self.calls: int = 0
+    def __init__(self) -> None:
+        self.seen_prompts: list[str] = []
 
     async def extract(
         self,
@@ -141,20 +150,50 @@ class _ScriptedAdapter:
         json_schema: dict[str, Any],
         timeout: float | None = None,
     ) -> dict[str, Any]:
-        self.calls += 1
-        assert self._script, (
-            f"_ScriptedAdapter exhausted on call {self.calls}; "
-            "test scripted fewer responses than the runner requested"
-        )
-        return self._script.pop(0)
+        self.seen_prompts.append(prompt)
+        if _REFINED_MARKER in prompt:
+            return dict(_GOLD_INVOICE_PAYLOAD)
+        return dict(_DEGRADED_INVOICE_PAYLOAD)
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)
 
 
-def _register() -> Registry:
+class _TutorAdapter:
+    """Tutor backend: returns one fixed proposal payload regardless of prompt.
+
+    The tutor's job here is fully decided by the test (it must yield ``diff``);
+    its prompt-sensitivity is irrelevant, so a fixed payload keeps the E2E focus
+    on the extraction adapter's causal behaviour.
+    """
+
+    def __init__(self, diff: str) -> None:
+        self._payload: dict[str, Any] = {"decline": False, "diff": diff}
+
+    async def extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        return dict(self._payload)
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return dict(json_schema)
+
+
+def _register(prompt: str) -> Registry:
+    """Registry whose invoice bundle carries ``prompt`` as its base prompt.
+
+    ``run_eval`` has no prompt parameter — the base prompt fed to the adapter is
+    ``bundle.prompt`` (orchestrator assembles ``bundle.prompt`` + input block).
+    ArtefactBundle is a frozen dataclass, so ``dataclasses.replace`` lets the
+    test pin the exact prompt the adapter will see, routing the patched text in.
+    """
     registry = Registry()
-    registry.register("invoice", compile_spec(EntitySpec.model_validate(_INVOICE_SPEC)))
+    compiled = compile_spec(EntitySpec.model_validate(_INVOICE_SPEC))
+    registry.register("invoice", dataclasses.replace(compiled, prompt=prompt))
     return registry
 
 
@@ -171,37 +210,43 @@ def _build_report(spec_name: str, f1: float) -> dict[str, Any]:
 
 @pytest.mark.integration
 def test_refine_restores_f1_on_invoice_spec() -> None:
-    registry = _register()
     case = FixtureCase(name="acme_invoice", input="raw invoice text", expected=_SCORED_EXPECTED)
 
-    # 1. Degraded prompt -> degraded extraction -> F1 floor.
-    before = run_eval(
-        "invoice",
-        [case],
-        backend=_ScriptedAdapter([_DEGRADED_INVOICE_PAYLOAD]),
-        registry=registry,
-    )
+    # ONE adapter instance spans both runs: output is a function of the prompt it
+    # sees, never of call order. The F1 swing is therefore *caused* by the prompt
+    # changing between runs — causality, not the choreography a scripted double
+    # would prove (LL-006: the prompt-ignoring double can only show plumbing).
+    backend = _PromptSensitiveAdapter()
+
+    # 1. Degraded prompt (no refined marker) -> adapter degrades -> F1 floor.
+    before = run_eval("invoice", [case], backend=backend, registry=_register(_DEGRADED_PROMPT))
     assert before.metrics.f1 == 0.0
 
     # 2. Tutor proposes a patch from the (degraded) report; apply it.
     diff = propose_patch_sync(
         report=_build_report("invoice", before.metrics.f1),
         current_prompt=_DEGRADED_PROMPT,
-        backend=_ScriptedAdapter([{"decline": False, "diff": _TUTOR_DIFF}]),
+        backend=_TutorAdapter(_TUTOR_DIFF),
     )
+    assert diff == _TUTOR_DIFF
     patched_prompt = apply_patch(_DEGRADED_PROMPT, diff)
     assert patched_prompt != _DEGRADED_PROMPT
+    assert _REFINED_MARKER in patched_prompt
+    assert "Return the vendor name as written." not in patched_prompt
 
-    # 3. Refined prompt -> gold extraction -> F1 restored.
-    after = run_eval(
-        "invoice",
-        [case],
-        backend=_ScriptedAdapter([_GOLD_INVOICE_PAYLOAD]),
-        registry=registry,
-    )
+    # 3. Patched prompt is routed into run_eval via the registry bundle. The SAME
+    # adapter now sees the refined marker -> emits gold -> F1 restored. Nothing
+    # but the prompt differs from run 1.
+    after = run_eval("invoice", [case], backend=backend, registry=_register(patched_prompt))
     assert after.metrics.f1 == 1.0
 
-    # 4. Measurable, non-negative uplift (L217: restores >= original F1).
+    # 4. The adapter saw the degraded prompt first, the patched prompt second —
+    # proving the runner actually fed bundle.prompt through to extract().
+    assert len(backend.seen_prompts) == 2
+    assert _REFINED_MARKER not in backend.seen_prompts[0]
+    assert _REFINED_MARKER in backend.seen_prompts[1]
+
+    # 5. Measurable, non-negative uplift (L217: restores >= original F1).
     delta = compute_delta(before.metrics, after.metrics)
     assert delta.improved is True
     assert after.metrics.f1 >= before.metrics.f1

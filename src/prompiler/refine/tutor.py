@@ -119,12 +119,20 @@ def propose_patch_sync(
     backend: BackendAdapter,
     timeout: float | None = None,
 ) -> str:
-    """Sync wrapper over :func:`propose_patch` via :func:`asyncio.run`."""
-    return asyncio.run(
-        propose_patch(
-            report=report,
-            current_prompt=current_prompt,
-            backend=backend,
-            timeout=timeout,
-        )
+    """Sync wrapper over :func:`propose_patch` via :func:`asyncio.run`.
+
+    The coroutine is closed in ``finally`` so it is never orphaned when
+    ``asyncio.run`` cannot drive it (e.g. raised because a loop is already
+    running); on the success path the coroutine is already finished and
+    ``close()`` is a no-op.
+    """
+    coro = propose_patch(
+        report=report,
+        current_prompt=current_prompt,
+        backend=backend,
+        timeout=timeout,
     )
+    try:
+        return asyncio.run(coro)
+    finally:
+        coro.close()
