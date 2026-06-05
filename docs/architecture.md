@@ -304,7 +304,7 @@ Cassette load in **strict playback** (the default) does not re-scrub; it asserts
 - Tutor: LLM call with the eval report + current prompt + a fixed system prompt asking for a unified diff over the prompt text.
 - Diff applier: parses unified diff, shows preview to user, requires explicit confirmation. v1 never auto-applies. v2 adds `--auto-apply` with metric-threshold and iteration cap.
 - Re-eval after apply: surface metric delta vs previous report.
-- Refusal handling: if tutor declines or returns a malformed diff, surface `RefineError` and exit non-zero. No silent fallback.
+- Refusal handling: if tutor declines or returns a malformed diff, surface `AdapterError` and exit non-zero. No silent fallback. (Refine composes on the sealed error hierarchy — §1.3 — rather than inventing a `RefineError` sibling.)
 
 ### 2.7 MCP Server (`mcp/`)
 
