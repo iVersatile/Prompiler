@@ -201,6 +201,19 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] Snapshot test for HTML report (golden-file diff).
 - [x] HTML report verified at viewport 320, 768, 1440.
 
+**Test-coverage hardening (gap backlog)**
+
+Gap evaluation of the e2e + integration suites (2026-06-05) surfaced the
+following. Worked in severity order (HIGH → LOW). Items G4/G6 may be blocked on
+later phases; noted inline.
+
+- [ ] `[gap G3]` HIGH — Real backend not exercised in integration tier. `test_integration_backend_swap.py` uses scripted doubles only; claude/openai/gemini have unit + cassette coverage but no integration test driving a real adapter through the orchestrator against recorded wire bytes. Add a cassette-backed integration test.
+- [ ] `[gap G4]` HIGH — MCP extract-over-protocol untested (only `/healthz` + 404). **Blocked on P6** — MCP tool/extract surface not implemented (P0 skeleton only). Track here, implement when P6 lands.
+- [ ] `[gap G1]` MEDIUM — E2E breadth: single e2e test (invoice refine-uplift) only. No e2e for tutor-decline path, other spec types, or full CLI refine flow wired to a real eval run.
+- [ ] `[gap G5]` MEDIUM — Spec disk mismatch: 6 spec types tested inline but only 2 example YAMLs on disk (`invoice`, `email_category`). Loader+hash+linter path under-exercised for the inline 6.
+- [ ] `[gap G2]` LOW — No `e2e` pytest marker; the lone e2e folds into the `integration` tier. Can't select/run e2e in isolation.
+- [ ] `[gap G6]` LOW — Integration spec tests cover happy/coerce/reject only; thin on partial/multi-field failures and real-ish retry-then-succeed bounce.
+
 ---
 
 ### P5 — Refinement Loop
