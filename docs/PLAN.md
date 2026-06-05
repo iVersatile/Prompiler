@@ -180,13 +180,13 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 **Tasks**
 
-- YAML fixture loader.
-- Eval runner: iterate fixtures → run extraction → diff against expected → compute per-field precision / recall / F1 + overall metrics.
-- Cost + token accounting per run.
-- `eval-report.json` emitter (with `spec_hash`, backend, model, timestamp).
-- `eval-report.html` static dashboard (zero JS framework; one vanilla JS file for table sort + filter).
-- `prompiler eval` CLI subcommand.
-- `[plan]` Zero-dep fuzzy fallback for nested-array eval matching: token-set Jaccard similarity at threshold ≥ 0.85, activated only on records that score F1 = 0 under exact match. Catches near-miss extractions (trailing whitespace, punctuation drift, minor reordering) without pulling an embedding model or GPU dependency. Reported as a separate `fuzzy_f1` column alongside `exact_f1` so the signal stays auditable.
+- [x] YAML fixture loader.
+- [x] Eval runner: iterate fixtures → run extraction → diff against expected → compute per-field precision / recall / F1 + overall metrics.
+- [x] Cost + token accounting per run.
+- [x] `eval-report.json` emitter (with `spec_hash`, backend, model, timestamp).
+- [x] `eval-report.html` static dashboard (zero JS framework; one vanilla JS file for table sort + filter).
+- [x] `prompiler eval` CLI subcommand.
+- [x] `[plan]` Zero-dep fuzzy fallback for nested-array eval matching: token-set Jaccard similarity at threshold ≥ 0.85, activated only on records that score F1 = 0 under exact match. Catches near-miss extractions (trailing whitespace, punctuation drift, minor reordering) without pulling an embedding model or GPU dependency. Reported as a separate `fuzzy_f1` column alongside `exact_f1` so the signal stays auditable.
 
 **Acceptance criteria**
 
@@ -197,9 +197,9 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 **Definition of done**
 
-- ≥ 85% coverage on `eval/` module.
-- Snapshot test for HTML report (golden-file diff).
-- HTML report verified at viewport 320, 768, 1440.
+- [x] ≥ 85% coverage on `eval/` module.
+- [x] Snapshot test for HTML report (golden-file diff).
+- [x] HTML report verified at viewport 320, 768, 1440.
 
 ---
 
