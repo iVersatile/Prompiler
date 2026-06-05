@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Eval report — demo</title>
+  <style>
+:root {
+  --bg: #ffffff;
+  --fg: #1a1a1a;
+  --muted: #5a5a5a;
+  --border: #d8d8d8;
+  --surface: #f6f6f6;
+  --match: #1a7f37;
+  --mismatch: #b42318;
+  --missing: #9a6700;
+  --extra: #6941c6;
+  --accent: #0b5cad;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 1rem;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--fg);
+  background: var(--bg);
+}
+h1 { font-size: 1.5rem; margin: 0 0 0.25rem; }
+h2 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+.meta { color: var(--muted); font-size: 0.9rem; }
+.meta dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15rem 0.75rem;
+  margin: 0.75rem 0 0;
+}
+.meta dt { font-weight: 600; }
+.meta dd { margin: 0; word-break: break-all; }
+.cards { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+.card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  background: var(--surface);
+}
+.card .label { color: var(--muted); font-size: 0.8rem; text-transform: uppercase; }
+.card .value { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.controls { margin: 0.5rem 0; }
+.controls input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+caption { text-align: left; color: var(--muted); font-size: 0.85rem; padding: 0.25rem 0; }
+th, td {
+  text-align: left;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+th[aria-sort] { cursor: pointer; user-select: none; }
+th[aria-sort]::after { content: " ↕"; color: var(--muted); }
+th[aria-sort="ascending"]::after { content: " ↑"; color: var(--accent); }
+th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
+.status { font-weight: 600; }
+.status-match { color: var(--match); }
+.status-mismatch { color: var(--mismatch); }
+.status-missing { color: var(--missing); }
+.status-extra { color: var(--extra); }
+.ok-true { color: var(--match); font-weight: 600; }
+.ok-false { color: var(--mismatch); font-weight: 600; }
+.diff-list { margin: 0; padding-left: 1.1rem; }
+.diff-list li { margin: 0.1rem 0; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+@media (min-width: 768px) {
+  body { padding: 1.5rem 2rem; }
+  .cards { grid-template-columns: repeat(3, 1fr); }
+}
+@media (min-width: 1440px) {
+  body { max-width: 1200px; margin: 0 auto; padding: 2rem 3rem; }
+}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Eval report — demo</h1>
+  <div class="meta">
+    <dl>
+      <dt>Spec</dt>
+      <dd>demo</dd>
+      <dt>Spec hash</dt>
+      <dd>abc123</dd>
+      <dt>Backend</dt>
+      <dd>ollama</dd>
+      <dt>Model</dt>
+      <dd>qwen2.5:7b</dd>
+      <dt>Timestamp</dt>
+      <dd>2026-05-21T01:38:00Z</dd>
+      <dt>Fixture</dt>
+      <dd>tests/fixtures/demo.yaml</dd>
+    </dl>
+  </div>
+  </header>
+  <section aria-labelledby="aggregate-heading">
+    <h2 id="aggregate-heading">Aggregate</h2>
+    <div class="cards">
+      <div class="card">
+        <div class="label">Precision</div>
+        <div class="value">0.5000</div>
+      </div>
+      <div class="card">
+        <div class="label">Recall</div>
+        <div class="value">0.3333</div>
+      </div>
+      <div class="card">
+        <div class="label">F1</div>
+        <div class="value">0.4000</div>
+      </div>
+      <div class="card">
+        <div class="label">Exact F1</div>
+        <div class="value">0.4000</div>
+      </div>
+      <div class="card">
+        <div class="label">Fuzzy F1</div>
+        <div class="value">—</div>
+      </div>
+    </div>
+  </section>
+  <section aria-labelledby="per-field-heading">
+    <h2 id="per-field-heading">Per-field scores</h2>
+    <div class="table-wrap">
+    <table class="sortable">
+      <caption>Click a column header to sort.</caption>
+      <thead>
+        <tr>
+          <th scope="col" aria-sort="none">Field</th>
+          <th scope="col" aria-sort="none">P</th>
+          <th scope="col" aria-sort="none">R</th>
+          <th scope="col" aria-sort="none">F1</th>
+        </tr>
+      </thead>
+      <tbody>
+      <tr>
+        <td>age</td>
+        <td data-sort="0.0000">0.0000</td>
+        <td data-sort="0.0000">0.0000</td>
+        <td data-sort="0.0000">0.0000</td>
+      </tr>
+      <tr>
+        <td>name</td>
+        <td data-sort="0.5000">0.5000</td>
+        <td data-sort="0.5000">0.5000</td>
+        <td data-sort="0.5000">0.5000</td>
+      </tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section aria-labelledby="per-case-heading">
+    <h2 id="per-case-heading">Per-case results</h2>
+    <div class="controls">
+      <input id="case-filter" type="search" placeholder="Filter cases…" aria-label="Filter cases">
+    </div>
+    <div class="table-wrap">
+    <table id="per-case-table" class="sortable">
+      <caption>Click Name or Status to sort; use the box above to filter.</caption>
+      <thead>
+        <tr>
+          <th scope="col" aria-sort="none">Name</th>
+          <th scope="col" aria-sort="none">Status</th>
+          <th scope="col">Diff</th>
+        </tr>
+      </thead>
+      <tbody>
+      <tr>
+        <td>case-ok</td>
+        <td data-sort="1"><span class="ok-true">pass</span></td>
+        <td>
+        <ul class="diff-list">
+          <li><span class="status status-match">match</span> <code>name</code>: expected Ada, predicted Ada</li>
+        </ul>
+      </td>
+      </tr>
+      <tr>
+        <td>case-bad</td>
+        <td data-sort="0"><span class="ok-false">fail</span></td>
+        <td>
+        <ul class="diff-list">
+          <li><span class="status status-mismatch">mismatch</span> <code>name</code>: expected Bob, predicted Bo</li>
+          <li><span class="status status-missing">missing</span> <code>age</code>: expected 30, predicted —</li>
+        </ul>
+      </td>
+      </tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+  <section aria-labelledby="usage-heading">
+    <h2 id="usage-heading">Usage</h2>
+    <p>Usage metrics were not captured for this run.</p>
+  </section>
+  <script>
+(function () {
+  function cellText(row, i) {
+    return (row.children[i].dataset.sort ?? row.children[i].textContent).trim();
+  }
+  function compare(a, b) {
+    var na = parseFloat(a), nb = parseFloat(b);
+    if (!isNaN(na) && !isNaN(nb)) { return na - nb; }
+    return a.localeCompare(b);
+  }
+  document.querySelectorAll("table.sortable th[aria-sort]").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var table = th.closest("table");
+      var headers = Array.prototype.slice.call(th.parentNode.children);
+      var idx = headers.indexOf(th);
+      var asc = th.getAttribute("aria-sort") !== "ascending";
+      headers.forEach(function (h) { h.setAttribute("aria-sort", "none"); });
+      th.setAttribute("aria-sort", asc ? "ascending" : "descending");
+      var body = table.tBodies[0];
+      var rows = Array.prototype.slice.call(body.rows);
+      rows.sort(function (r1, r2) {
+        var c = compare(cellText(r1, idx), cellText(r2, idx));
+        return asc ? c : -c;
+      });
+      rows.forEach(function (r) { body.appendChild(r); });
+    });
+  });
+  var filter = document.getElementById("case-filter");
+  if (filter) {
+    var rows = document.querySelectorAll("#per-case-table tbody tr");
+    filter.addEventListener("input", function () {
+      var q = filter.value.toLowerCase();
+      rows.forEach(function (r) {
+        r.style.display = r.textContent.toLowerCase().indexOf(q) === -1 ? "none" : "";
+      });
+    });
+  }
+})();
+  </script>
+</body>
+</html>
