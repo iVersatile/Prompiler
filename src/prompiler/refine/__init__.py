@@ -12,6 +12,13 @@ from prompiler.refine.differ import (
     confirm_and_apply,
     render_diff_preview,
 )
+from prompiler.refine.reeval import (
+    FieldDelta,
+    MetricDelta,
+    ReevalDelta,
+    compute_delta,
+    render_delta,
+)
 from prompiler.refine.tutor import (
     TUTOR_RESPONSE_SCHEMA,
     build_tutor_user_prompt,
@@ -21,10 +28,15 @@ from prompiler.refine.tutor import (
 
 __all__ = [
     "TUTOR_RESPONSE_SCHEMA",
+    "FieldDelta",
+    "MetricDelta",
+    "ReevalDelta",
     "apply_patch",
     "build_tutor_user_prompt",
+    "compute_delta",
     "confirm_and_apply",
     "propose_patch",
     "propose_patch_sync",
+    "render_delta",
     "render_diff_preview",
 ]
