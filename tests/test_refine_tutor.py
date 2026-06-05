@@ -127,6 +127,28 @@ def test_propose_patch_raises_on_decline_embedding_reason() -> None:
     assert "prompt is already optimal" in str(excinfo.value)
 
 
+def test_propose_patch_decline_null_reason_uses_placeholder() -> None:
+    # JSON null -> Python None must collapse to the placeholder, not survive as
+    # the literal "None" in the error message (issue 03 / LL-003).
+    adapter = RecordingAdapter({"decline": True, "reason": None, "diff": ""})
+
+    with pytest.raises(AdapterError) as excinfo:
+        asyncio.run(propose_patch(report=_REPORT, current_prompt=_CURRENT_PROMPT, backend=adapter))
+
+    message = str(excinfo.value)
+    assert "(no reason given)" in message
+    assert "None" not in message
+
+
+def test_propose_patch_decline_blank_reason_uses_placeholder() -> None:
+    adapter = RecordingAdapter({"decline": True, "reason": "   ", "diff": ""})
+
+    with pytest.raises(AdapterError) as excinfo:
+        asyncio.run(propose_patch(report=_REPORT, current_prompt=_CURRENT_PROMPT, backend=adapter))
+
+    assert "(no reason given)" in str(excinfo.value)
+
+
 def test_propose_patch_raises_on_empty_diff() -> None:
     adapter = RecordingAdapter({"decline": False, "reason": "", "diff": "   "})
 

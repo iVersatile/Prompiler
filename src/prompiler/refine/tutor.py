@@ -99,7 +99,13 @@ async def propose_patch(
     )
 
     if response.get("decline"):
-        reason = response.get("reason", "") or "(no reason given)"
+        # Distinguish absent/null/blank reason from a real one (LL-003): only
+        # fall back to the placeholder when there is nothing meaningful to show,
+        # so a present non-blank reason survives verbatim into the error.
+        raw_reason = response.get("reason")
+        reason = raw_reason.strip() if isinstance(raw_reason, str) else ""
+        if not reason:
+            reason = "(no reason given)"
         raise AdapterError(f"tutor declined to propose a patch: {reason}")
 
     diff: str = response.get("diff", "")
