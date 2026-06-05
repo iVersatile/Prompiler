@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -27,7 +28,8 @@ from prompiler.eval import (
 )
 from prompiler.mcp.server import LOOPBACK_HOST, build_server
 from prompiler.obs import configure_logging, get_logger
-from prompiler.runtime.errors import EvalError
+from prompiler.refine import propose_patch_sync
+from prompiler.runtime.errors import AdapterError, EvalError
 from prompiler.runtime.registry import register_from_path
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
@@ -153,6 +155,43 @@ def _build_parser() -> argparse.ArgumentParser:
         "--expect-hash",
         default=None,
         help="Expected spec_hash; a mismatch emits a WARN.",
+    )
+
+    refine = subparsers.add_parser(
+        "refine",
+        help="Propose a prompt edit from an eval report (tutor diff to stdout).",
+    )
+    refine.add_argument(
+        "report",
+        type=Path,
+        help="Path to the eval-report.json to refine against.",
+    )
+    refine.add_argument(
+        "prompt",
+        type=Path,
+        help="Path to the prompt text file to propose a diff over.",
+    )
+    refine.add_argument(
+        "--backend",
+        choices=["mock", "ollama"],
+        default="ollama",
+        help="Tutor backend (default: ollama).",
+    )
+    refine.add_argument(
+        "--model",
+        default=None,
+        help="Model name override for the backend.",
+    )
+    refine.add_argument(
+        "--base-url",
+        default=None,
+        help="Base URL override for the ollama backend.",
+    )
+    refine.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help="Per-call timeout in seconds.",
     )
     return parser
 
@@ -316,6 +355,47 @@ def _cmd_eval(
     return 0
 
 
+def _cmd_refine(
+    report_path: Path,
+    prompt_path: Path,
+    *,
+    backend: str,
+    model: str | None,
+    base_url: str | None,
+    timeout: float | None,
+) -> int:
+    if not report_path.is_file():
+        sys.stderr.write(f"prompiler refine: report not found: {report_path}\n")
+        return 2
+    if not prompt_path.is_file():
+        sys.stderr.write(f"prompiler refine: prompt not found: {prompt_path}\n")
+        return 2
+
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        sys.stderr.write(f"prompiler refine: invalid report JSON: {exc}\n")
+        return 1
+
+    current_prompt = prompt_path.read_text(encoding="utf-8")
+    adapter, _hook, _resolved_model = _build_eval_backend(backend, model, base_url)
+    try:
+        diff = propose_patch_sync(
+            report=report,
+            current_prompt=current_prompt,
+            backend=adapter,  # type: ignore[arg-type]
+            timeout=timeout,
+        )
+    except AdapterError as exc:
+        sys.stderr.write(f"prompiler refine: {exc}\n")
+        return 1
+    finally:
+        asyncio.run(adapter.aclose())  # type: ignore[attr-defined]
+
+    sys.stdout.write(diff)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
     parser = _build_parser()
@@ -338,6 +418,16 @@ def main(argv: list[str] | None = None) -> int:
             html_out=args.html_out,
             timeout=args.timeout,
             expect_hash=args.expect_hash,
+        )
+
+    if args.command == "refine":
+        return _cmd_refine(
+            args.report,
+            args.prompt,
+            backend=args.backend,
+            model=args.model,
+            base_url=args.base_url,
+            timeout=args.timeout,
         )
 
     parser.print_help()

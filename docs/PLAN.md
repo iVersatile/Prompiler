@@ -209,8 +209,8 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 - [x] Patch generator: feeds eval report + current prompt to a "tutor" LLM call; emits unified diff of prompt text.
 - [x] Diff applier (human-confirm flow) with unified-diff preview.
-- Re-run eval and surface metric delta.
-- Refusal-mode handling: if tutor declines, surface error and exit non-zero.
+- [x] Re-run eval and surface metric delta.
+- [x] Refusal-mode handling: if tutor declines, surface error and exit non-zero.
 
 **Acceptance criteria**
 
