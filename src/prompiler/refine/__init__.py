@@ -7,6 +7,11 @@ not invent its own error type — per the sealed hierarchy (architecture.md
 
 from __future__ import annotations
 
+from prompiler.refine.differ import (
+    apply_patch,
+    confirm_and_apply,
+    render_diff_preview,
+)
 from prompiler.refine.tutor import (
     TUTOR_RESPONSE_SCHEMA,
     build_tutor_user_prompt,
@@ -16,7 +21,10 @@ from prompiler.refine.tutor import (
 
 __all__ = [
     "TUTOR_RESPONSE_SCHEMA",
+    "apply_patch",
     "build_tutor_user_prompt",
+    "confirm_and_apply",
     "propose_patch",
     "propose_patch_sync",
+    "render_diff_preview",
 ]
