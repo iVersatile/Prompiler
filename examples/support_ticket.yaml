@@ -1,0 +1,14 @@
+spec_version: 1
+name: support_ticket
+task: classify
+description: Tag an inbound support ticket with every applicable topic label.
+allow_multi_label: true
+labels:
+  - name: billing
+    description: Charges, invoices, refunds, and payment failures.
+  - name: bug
+    description: Something in the product is broken or erroring.
+  - name: feature_request
+    description: A request for new or expanded functionality.
+  - name: account
+    description: Login, access, profile, or permission issues.

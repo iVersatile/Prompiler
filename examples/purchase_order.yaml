@@ -1,0 +1,63 @@
+spec_version: 1
+name: purchase_order
+task: extract
+description: Extract structured purchase-order details, including nested line items.
+cite: true
+max_input_tokens: 8000
+fields:
+  - name: po_number
+    type: string
+    required: true
+    description: Purchase-order identifier printed in the document header.
+    pattern: "^PO-[0-9]{6}$"
+  - name: order_date
+    type: date
+    required: true
+    description: Date the order was placed, in ISO 8601 form.
+  - name: priority
+    type: enum
+    required: false
+    description: Fulfilment priority requested by the buyer.
+    values:
+      - low
+      - standard
+      - rush
+  - name: item_count
+    type: integer
+    required: true
+    description: Total number of distinct line items on the order.
+    minimum: 1
+    maximum: 999
+  - name: ship_to
+    type: object
+    required: true
+    description: Destination address for the shipment.
+    fields:
+      - name: city
+        type: string
+        required: true
+        description: Destination city.
+      - name: postcode
+        type: string
+        required: true
+        description: Destination postal code.
+  - name: line_items
+    type: array
+    required: true
+    description: One entry per ordered product line.
+    item:
+      type: object
+      description: A single ordered product line.
+      fields:
+        - name: sku
+          type: string
+          required: true
+          description: Stock-keeping unit identifying the product.
+        - name: quantity
+          type: integer
+          required: true
+          description: Units ordered for this line.
+          minimum: 1
+cross_field_constraints:
+  - expr: item_count == len(line_items)
+    severity: error
