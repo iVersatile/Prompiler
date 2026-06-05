@@ -207,7 +207,7 @@ Gap evaluation of the e2e + integration suites (2026-06-05) surfaced the
 following. Worked in severity order (HIGH → LOW). Items G4/G6 may be blocked on
 later phases; noted inline.
 
-- [ ] `[gap G3]` HIGH — Real backend not exercised in integration tier. `test_integration_backend_swap.py` uses scripted doubles only; claude/openai/gemini have unit + cassette coverage but no integration test driving a real adapter through the orchestrator against recorded wire bytes. Add a cassette-backed integration test.
+- [x] `[gap G3]` HIGH — Real backend not exercised in integration tier. `test_integration_backend_swap.py` uses scripted doubles only; claude/openai/gemini have unit + cassette coverage but no integration test driving a real adapter through the orchestrator against recorded wire bytes. Add a cassette-backed integration test.
 - [ ] `[gap G4]` HIGH — MCP extract-over-protocol untested (only `/healthz` + 404). **Blocked on P6** — MCP tool/extract surface not implemented (P0 skeleton only). Track here, implement when P6 lands.
 - [ ] `[gap G1]` MEDIUM — E2E breadth: single e2e test (invoice refine-uplift) only. No e2e for tutor-decline path, other spec types, or full CLI refine flow wired to a real eval run.
 - [ ] `[gap G5]` MEDIUM — Spec disk mismatch: 6 spec types tested inline but only 2 example YAMLs on disk (`invoice`, `email_category`). Loader+hash+linter path under-exercised for the inline 6.
