@@ -211,7 +211,7 @@ later phases; noted inline.
 - [ ] `[gap G4]` HIGH — MCP extract-over-protocol untested (only `/healthz` + 404). **Blocked on P6** — MCP tool/extract surface not implemented (P0 skeleton only). Track here, implement when P6 lands.
 - [x] `[gap G1]` MEDIUM — E2E breadth: single e2e test (invoice refine-uplift) only. No e2e for tutor-decline path, other spec types, or full CLI refine flow wired to a real eval run.
 - [x] `[gap G5]` MEDIUM — Spec disk mismatch: 6 spec types tested inline but only 2 example YAMLs on disk (`invoice`, `email_category`). Loader+hash+linter path under-exercised for the inline 6.
-- [ ] `[gap G2]` LOW — No `e2e` pytest marker; the lone e2e folds into the `integration` tier. Can't select/run e2e in isolation.
+- [x] `[gap G2]` LOW — No `e2e` pytest marker; the lone e2e folds into the `integration` tier. Can't select/run e2e in isolation.
 - [ ] `[gap G6]` LOW — Integration spec tests cover happy/coerce/reject only; thin on partial/multi-field failures and real-ish retry-then-succeed bounce.
 
 ---

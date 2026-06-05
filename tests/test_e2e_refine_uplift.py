@@ -209,7 +209,7 @@ def _build_report(spec_name: str, f1: float) -> dict[str, Any]:
     }
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_refine_restores_f1_on_invoice_spec() -> None:
     case = FixtureCase(name="acme_invoice", input="raw invoice text", expected=_SCORED_EXPECTED)
 
@@ -278,7 +278,7 @@ class _DecliningTutorAdapter:
         return dict(json_schema)
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_refine_decline_leaves_prompt_and_f1_at_floor() -> None:
     """Tutor declines -> ``AdapterError`` -> prompt unchanged -> F1 stays at floor.
 
@@ -377,7 +377,7 @@ def _register_contact(prompt: str) -> Registry:
     return registry
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_refine_restores_f1_on_contact_spec() -> None:
     """Uplift on a second, non-invoice extract spec — proves breadth (gap G1)."""
     case = FixtureCase(name="dana", input="raw contact text", expected=_CONTACT_GOLD)
