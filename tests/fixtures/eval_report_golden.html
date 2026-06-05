@@ -75,6 +75,7 @@ th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
 .ok-false { color: var(--mismatch); font-weight: 600; }
 .diff-list { margin: 0; padding-left: 1.1rem; }
 .diff-list li { margin: 0.1rem 0; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 @media (min-width: 768px) {
   body { padding: 1.5rem 2rem; }
   .cards { grid-template-columns: repeat(3, 1fr); }
@@ -131,6 +132,7 @@ th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
   </section>
   <section aria-labelledby="per-field-heading">
     <h2 id="per-field-heading">Per-field scores</h2>
+    <div class="table-wrap">
     <table class="sortable">
       <caption>Click a column header to sort.</caption>
       <thead>
@@ -156,12 +158,14 @@ th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
       </tr>
       </tbody>
     </table>
+    </div>
   </section>
   <section aria-labelledby="per-case-heading">
     <h2 id="per-case-heading">Per-case results</h2>
     <div class="controls">
       <input id="case-filter" type="search" placeholder="Filter cases…" aria-label="Filter cases">
     </div>
+    <div class="table-wrap">
     <table id="per-case-table" class="sortable">
       <caption>Click Name or Status to sort; use the box above to filter.</caption>
       <thead>
@@ -193,6 +197,7 @@ th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
       </tr>
       </tbody>
     </table>
+    </div>
   </section>
   <section aria-labelledby="usage-heading">
     <h2 id="usage-heading">Usage</h2>

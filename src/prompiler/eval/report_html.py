@@ -107,6 +107,7 @@ th[aria-sort="descending"]::after { content: " ↓"; color: var(--accent); }
 .ok-false { color: var(--mismatch); font-weight: 600; }
 .diff-list { margin: 0; padding-left: 1.1rem; }
 .diff-list li { margin: 0.1rem 0; }
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 @media (min-width: 768px) {
   body { padding: 1.5rem 2rem; }
   .cards { grid-template-columns: repeat(3, 1fr); }
@@ -217,6 +218,7 @@ def _render_per_field(report: dict[str, Any]) -> str:
     return (
         '  <section aria-labelledby="per-field-heading">\n'
         '    <h2 id="per-field-heading">Per-field scores</h2>\n'
+        '    <div class="table-wrap">\n'
         '    <table class="sortable">\n'
         "      <caption>Click a column header to sort.</caption>\n"
         "      <thead>\n"
@@ -229,6 +231,7 @@ def _render_per_field(report: dict[str, Any]) -> str:
         "      </thead>\n"
         f"      <tbody>\n{rows}\n      </tbody>\n"
         "    </table>\n"
+        "    </div>\n"
         "  </section>"
     )
 
@@ -272,6 +275,7 @@ def _render_per_case(report: dict[str, Any]) -> str:
         '      <input id="case-filter" type="search" placeholder="Filter cases…"'
         ' aria-label="Filter cases">\n'
         "    </div>\n"
+        '    <div class="table-wrap">\n'
         '    <table id="per-case-table" class="sortable">\n'
         "      <caption>Click Name or Status to sort; use the box above to filter.</caption>\n"
         "      <thead>\n"
@@ -283,6 +287,7 @@ def _render_per_case(report: dict[str, Any]) -> str:
         "      </thead>\n"
         f"      <tbody>\n{rows}\n      </tbody>\n"
         "    </table>\n"
+        "    </div>\n"
         "  </section>"
     )
 
