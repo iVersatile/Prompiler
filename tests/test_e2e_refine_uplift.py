@@ -29,6 +29,7 @@ from prompiler.compiler import compile_spec
 from prompiler.eval.fixtures import FixtureCase
 from prompiler.eval.runner import run_eval
 from prompiler.refine import apply_patch, compute_delta, propose_patch_sync
+from prompiler.runtime.errors import AdapterError
 from prompiler.runtime.registry import Registry
 from prompiler.spec import EntitySpec
 
@@ -250,3 +251,153 @@ def test_refine_restores_f1_on_invoice_spec() -> None:
     delta = compute_delta(before.metrics, after.metrics)
     assert delta.improved is True
     assert after.metrics.f1 >= before.metrics.f1
+
+
+class _DecliningTutorAdapter:
+    """Tutor backend that refuses: returns ``decline=True`` with a reason.
+
+    Drives the decline branch of ``propose_patch`` (tutor.py L101) so the e2e
+    tier proves the *no-uplift* path — the tutor judging the prompt unimprovable
+    — not just the happy path. ``propose_patch_sync`` must surface this as an
+    ``AdapterError`` and leave the prompt untouched, so F1 stays at the floor.
+    """
+
+    def __init__(self, reason: str) -> None:
+        self._payload: dict[str, Any] = {"decline": True, "reason": reason}
+
+    async def extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        return dict(self._payload)
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return dict(json_schema)
+
+
+@pytest.mark.integration
+def test_refine_decline_leaves_prompt_and_f1_at_floor() -> None:
+    """Tutor declines -> ``AdapterError`` -> prompt unchanged -> F1 stays at floor.
+
+    The uplift test proves refine *can* recover F1; this proves the loop fails
+    safe when the tutor refuses: no patch is applied, the degraded prompt is
+    re-run verbatim, and the second eval reports the same floor F1 as the first.
+    """
+    case = FixtureCase(name="acme_invoice", input="raw invoice text", expected=_SCORED_EXPECTED)
+    backend = _PromptSensitiveAdapter()
+
+    before = run_eval("invoice", [case], backend=backend, registry=_register(_DEGRADED_PROMPT))
+    assert before.metrics.f1 == 0.0
+
+    with pytest.raises(AdapterError, match="tutor declined"):
+        propose_patch_sync(
+            report=_build_report("invoice", before.metrics.f1),
+            current_prompt=_DEGRADED_PROMPT,
+            backend=_DecliningTutorAdapter("prompt already optimal"),
+        )
+
+    # No patch -> the degraded prompt is re-run unchanged. F1 stays at the floor.
+    after = run_eval("invoice", [case], backend=backend, registry=_register(_DEGRADED_PROMPT))
+    assert after.metrics.f1 == 0.0
+
+    delta = compute_delta(before.metrics, after.metrics)
+    assert delta.improved is False
+    assert all(_REFINED_MARKER not in seen for seen in backend.seen_prompts)
+
+
+# --- Second extract spec: breadth beyond the invoice demo (gap G1) -----------
+#
+# A distinct extract spec with its own scored string fields, proving the uplift
+# path is not invoice-specific. Same causal mechanism: the adapter emits gold
+# iff the refined marker is present in the prompt.
+
+_CONTACT_SPEC: Final[dict[str, Any]] = {
+    "spec_version": 1,
+    "name": "contact",
+    "task": "extract",
+    "fields": [
+        {"name": "full_name", "type": "string", "required": True},
+        {"name": "email", "type": "string", "required": True},
+    ],
+}
+
+_CONTACT_GOLD: Final[dict[str, str]] = {
+    "full_name": "Dana Whitfield",
+    "email": "dana.whitfield@example.com",
+}
+
+_CONTACT_DEGRADED: Final[dict[str, str]] = {
+    "full_name": "Unknown Person",
+    "email": "n/a@example.com",
+}
+
+_CONTACT_DEGRADED_PROMPT: Final[str] = "Extract the contact.\nGuess the name if unclear.\n"
+
+_CONTACT_REFINED_MARKER: Final[str] = "copy the full name and email verbatim"
+
+_CONTACT_DIFF: Final[str] = (
+    "--- prompt.txt\n"
+    "+++ prompt.txt\n"
+    "@@ -1,2 +1,2 @@\n"
+    " Extract the contact.\n"
+    "-Guess the name if unclear.\n"
+    "+Copy the full name and email verbatim from the source text.\n"
+)
+
+
+class _ContactAdapter:
+    """Causal contact-extraction backend keyed on ``_CONTACT_REFINED_MARKER``."""
+
+    def __init__(self) -> None:
+        self.seen_prompts: list[str] = []
+
+    async def extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        self.seen_prompts.append(prompt)
+        if _CONTACT_REFINED_MARKER in prompt.lower():
+            return dict(_CONTACT_GOLD)
+        return dict(_CONTACT_DEGRADED)
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return dict(json_schema)
+
+
+def _register_contact(prompt: str) -> Registry:
+    registry = Registry()
+    compiled = compile_spec(EntitySpec.model_validate(_CONTACT_SPEC))
+    registry.register("contact", dataclasses.replace(compiled, prompt=prompt))
+    return registry
+
+
+@pytest.mark.integration
+def test_refine_restores_f1_on_contact_spec() -> None:
+    """Uplift on a second, non-invoice extract spec — proves breadth (gap G1)."""
+    case = FixtureCase(name="dana", input="raw contact text", expected=_CONTACT_GOLD)
+    backend = _ContactAdapter()
+
+    before = run_eval(
+        "contact", [case], backend=backend, registry=_register_contact(_CONTACT_DEGRADED_PROMPT)
+    )
+    assert before.metrics.f1 == 0.0
+
+    diff = propose_patch_sync(
+        report=_build_report("contact", before.metrics.f1),
+        current_prompt=_CONTACT_DEGRADED_PROMPT,
+        backend=_TutorAdapter(_CONTACT_DIFF),
+    )
+    patched_prompt = apply_patch(_CONTACT_DEGRADED_PROMPT, diff)
+    assert _CONTACT_REFINED_MARKER in patched_prompt.lower()
+
+    after = run_eval("contact", [case], backend=backend, registry=_register_contact(patched_prompt))
+    assert after.metrics.f1 == 1.0
+
+    delta = compute_delta(before.metrics, after.metrics)
+    assert delta.improved is True
