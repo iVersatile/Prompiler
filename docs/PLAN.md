@@ -248,6 +248,7 @@ later phases; noted inline.
 - Transports: stdio (default), HTTP (`--transport http --port N`).
 - Binding policy: `127.0.0.1` by default.
 - Token-usage in tool response metadata.
+- Close `[gap G4]` (P4 backlog): add integration test driving MCP extract-over-protocol end-to-end (not just `/healthz` + 404). Flip the G4 checkbox in the P4 gap list when done.
 
 **Acceptance criteria**
 
@@ -258,6 +259,7 @@ later phases; noted inline.
 **Definition of done**
 
 - E2E MCP suite (stdio + HTTP) green in CI.
+- `[gap G4]` closed: MCP extract-over-protocol covered by an integration test, G4 checkbox flipped in the P4 gap list.
 - Security review: no path traversal in resource handlers, no unbounded payload sizes, no default bind to 0.0.0.0.
 
 ---
