@@ -201,16 +201,30 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - [x] Snapshot test for HTML report (golden-file diff).
 - [x] HTML report verified at viewport 320, 768, 1440.
 
+**Test-coverage hardening (gap backlog)**
+
+Gap evaluation of the e2e + integration suites (2026-06-05) surfaced the
+following. Worked in severity order (HIGH → LOW). Items G4/G6 may be blocked on
+later phases; noted inline.
+
+- [x] `[gap G3]` HIGH — Real backend not exercised in integration tier. `test_integration_backend_swap.py` uses scripted doubles only; claude/openai/gemini have unit + cassette coverage but no integration test driving a real adapter through the orchestrator against recorded wire bytes. Add a cassette-backed integration test.
+- [ ] `[gap G4]` HIGH — MCP extract-over-protocol untested (only `/healthz` + 404). **Blocked on P6** — MCP tool/extract surface not implemented (P0 skeleton only). Track here, implement when P6 lands.
+- [x] `[gap G1]` MEDIUM — E2E breadth: single e2e test (invoice refine-uplift) only. No e2e for tutor-decline path, other spec types, or full CLI refine flow wired to a real eval run.
+- [x] `[gap G5]` MEDIUM — Spec disk mismatch: 6 spec types tested inline but only 2 example YAMLs on disk (`invoice`, `email_category`). Loader+hash+linter path under-exercised for the inline 6.
+- [x] `[gap G2]` LOW — No `e2e` pytest marker; the lone e2e folds into the `integration` tier. Can't select/run e2e in isolation.
+- [x] `[gap G6]` LOW — Integration spec tests cover happy/coerce/reject only; thin on partial/multi-field failures and real-ish retry-then-succeed bounce.
+- [ ] `[gap G7]` MEDIUM — `chunk_for_extract()` (PRD FR-13) unimplemented, not merely untested. PRD/architecture name it a v1-shipped utility and `runtime/__init__.py:4` docstring promises "the chunking helper", but no `def chunk*` exists anywhere in `src/` and no test references it. **Feature gap** — needs implementation + tests, not just a test. Severity MEDIUM: it is a standalone helper (no auto-chunk wiring required by FR-13), so nothing downstream is currently broken by its absence.
+
 ---
 
 ### P5 — Refinement Loop
 
 **Tasks**
 
-- Patch generator: feeds eval report + current prompt to a "tutor" LLM call; emits unified diff of prompt text.
-- Diff applier (human-confirm flow) with unified-diff preview.
-- Re-run eval and surface metric delta.
-- Refusal-mode handling: if tutor declines, surface error and exit non-zero.
+- [x] Patch generator: feeds eval report + current prompt to a "tutor" LLM call; emits unified diff of prompt text.
+- [x] Diff applier (human-confirm flow) with unified-diff preview.
+- [x] Re-run eval and surface metric delta.
+- [x] Refusal-mode handling: if tutor declines, surface error and exit non-zero.
 
 **Acceptance criteria**
 
@@ -220,8 +234,10 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 
 **Definition of done**
 
-- ≥ 80% coverage on `refine/` module.
-- E2E test using a canned fixture proves measurable F1 uplift on at least one of the demo specs.
+- [x] ≥ 80% coverage on `refine/` module. — **met**: full-suite coverage 98% (`differ` 96%, `reeval` 100%, `tutor` 100%, `__init__` 100%); 701 passed.
+- [x] E2E test using a canned fixture proves measurable F1 uplift on at least one of the demo specs. — **met**: `test_e2e_refine_uplift.py::test_refine_restores_f1_on_invoice_spec` drives invoice F1 0.0 → 1.0 with `delta.improved is True` and `after.metrics.f1 >= before.metrics.f1`; `..._contact_spec` + decline-path floor test also green.
+
+Phase-done (RULES §7): user approved 2026-06-06. CI green on `feat/p5-refinement-loop` (run 27060873115); §9 local gate 3 pass / 1 skip (structured-logging P2-deferred).
 
 ---
 
@@ -235,6 +251,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 - Transports: stdio (default), HTTP (`--transport http --port N`).
 - Binding policy: `127.0.0.1` by default.
 - Token-usage in tool response metadata.
+- Close `[gap G4]` (P4 backlog): add integration test driving MCP extract-over-protocol end-to-end (not just `/healthz` + 404). Flip the G4 checkbox in the P4 gap list when done.
 
 **Acceptance criteria**
 
@@ -245,6 +262,7 @@ Approximate calendar: 12 weeks total for a single engineer; ~6 weeks with two en
 **Definition of done**
 
 - E2E MCP suite (stdio + HTTP) green in CI.
+- `[gap G4]` closed: MCP extract-over-protocol covered by an integration test, G4 checkbox flipped in the P4 gap list.
 - Security review: no path traversal in resource handlers, no unbounded payload sizes, no default bind to 0.0.0.0.
 
 ---
