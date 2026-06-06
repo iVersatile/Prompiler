@@ -234,8 +234,10 @@ later phases; noted inline.
 
 **Definition of done**
 
-- ≥ 80% coverage on `refine/` module.
-- E2E test using a canned fixture proves measurable F1 uplift on at least one of the demo specs.
+- [x] ≥ 80% coverage on `refine/` module. — **met**: full-suite coverage 98% (`differ` 96%, `reeval` 100%, `tutor` 100%, `__init__` 100%); 701 passed.
+- [x] E2E test using a canned fixture proves measurable F1 uplift on at least one of the demo specs. — **met**: `test_e2e_refine_uplift.py::test_refine_restores_f1_on_invoice_spec` drives invoice F1 0.0 → 1.0 with `delta.improved is True` and `after.metrics.f1 >= before.metrics.f1`; `..._contact_spec` + decline-path floor test also green.
+
+Phase-done (RULES §7): user approved 2026-06-06. CI green on `feat/p5-refinement-loop` (run 27060873115); §9 local gate 3 pass / 1 skip (structured-logging P2-deferred).
 
 ---
 
