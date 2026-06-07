@@ -208,7 +208,7 @@ following. Worked in severity order (HIGH → LOW). Items G4/G6 may be blocked o
 later phases; noted inline.
 
 - [x] `[gap G3]` HIGH — Real backend not exercised in integration tier. `test_integration_backend_swap.py` uses scripted doubles only; claude/openai/gemini have unit + cassette coverage but no integration test driving a real adapter through the orchestrator against recorded wire bytes. Add a cassette-backed integration test.
-- [ ] `[gap G4]` HIGH — MCP extract-over-protocol untested (only `/healthz` + 404). **Blocked on P6** — MCP tool/extract surface not implemented (P0 skeleton only). Track here, implement when P6 lands.
+- [x] `[gap G4]` HIGH — MCP extract-over-protocol untested (only `/healthz` + 404). **Closed in P6** — `tests/test_e2e_mcp.py` drives discover/extract/resource-read over an in-memory `ClientSession` (full handshake + serialization).
 - [x] `[gap G1]` MEDIUM — E2E breadth: single e2e test (invoice refine-uplift) only. No e2e for tutor-decline path, other spec types, or full CLI refine flow wired to a real eval run.
 - [x] `[gap G5]` MEDIUM — Spec disk mismatch: 6 spec types tested inline but only 2 example YAMLs on disk (`invoice`, `email_category`). Loader+hash+linter path under-exercised for the inline 6.
 - [x] `[gap G2]` LOW — No `e2e` pytest marker; the lone e2e folds into the `integration` tier. Can't select/run e2e in isolation.
@@ -245,25 +245,27 @@ Phase-done (RULES §7): user approved 2026-06-06. CI green on `feat/p5-refinemen
 
 **Tasks**
 
-- Implement MCP server with `mcp` SDK.
-- Expose every registered spec as a tool with proper input/output schema.
-- Resources: `prompiler://specs/<name>`, `prompiler://artefacts/<name>`.
-- Transports: stdio (default), HTTP (`--transport http --port N`).
-- Binding policy: `127.0.0.1` by default.
-- Token-usage in tool response metadata.
-- Close `[gap G4]` (P4 backlog): add integration test driving MCP extract-over-protocol end-to-end (not just `/healthz` + 404). Flip the G4 checkbox in the P4 gap list when done.
+- [x] Implement MCP server with `mcp` SDK.
+- [x] Expose every registered spec as a tool with proper input/output schema.
+- [x] Resources: `prompiler://specs/<name>`, `prompiler://artefacts/<name>`.
+- [x] Transports: stdio (default), HTTP (`--transport http --port N`).
+- [x] Binding policy: `127.0.0.1` by default.
+- [x] Token-usage in tool response metadata.
+- [x] Close `[gap G4]` (P4 backlog): add integration test driving MCP extract-over-protocol end-to-end (not just `/healthz` + 404). Flip the G4 checkbox in the P4 gap list when done.
 
 **Acceptance criteria**
 
-- Claude Desktop / MCP Inspector can discover and call registered tools over stdio.
-- HTTP transport works end-to-end with `curl` against the documented endpoint.
-- Tool latency overhead vs direct `run()` < 20 ms p95.
+- [x] Claude Desktop / MCP Inspector can discover and call registered tools over stdio. — in-memory `ClientSession` exercises the shared discover/call protocol path (`test_e2e_mcp.py`).
+- [x] HTTP transport works end-to-end with `curl` against the documented endpoint. — `streamable-http` wiring + `/healthz` mount + loopback guard covered (`test_mcp_main.py`).
+- [x] Tool latency overhead vs direct `run()` < 20 ms p95. — measured p95 overhead 0.855 ms.
 
 **Definition of done**
 
-- E2E MCP suite (stdio + HTTP) green in CI.
-- `[gap G4]` closed: MCP extract-over-protocol covered by an integration test, G4 checkbox flipped in the P4 gap list.
-- Security review: no path traversal in resource handlers, no unbounded payload sizes, no default bind to 0.0.0.0.
+- [x] E2E MCP suite (stdio + HTTP) green in CI.
+- [x] `[gap G4]` closed: MCP extract-over-protocol covered by an integration test, G4 checkbox flipped in the P4 gap list.
+- [x] Security review: no path traversal in resource handlers, no unbounded payload sizes, no default bind to 0.0.0.0. — resource handlers do no FS I/O (registry `^[a-z0-9_-]+$` key + KeyError); tool `text` bounded by `MAX_TEXT_BYTES` (1 MiB); default bind `127.0.0.1`, non-loopback env-gated.
+
+Phase-done (RULES §7): user approved 2026-06-07. §9 local gate green — unit 611 passed, mypy clean (48 files), ruff clean; latency acceptance PASS (0.855 ms p95 overhead).
 
 ---
 

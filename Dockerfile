@@ -97,4 +97,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # `python -m prompiler.mcp` -> src/prompiler/mcp/__main__.py:main
 # (env-driven host/port; loopback-only unless PROMPILER_MCP_ALLOW_NON_LOOPBACK=1).
-CMD ["python", "-m", "prompiler.mcp"]
+CMD ["python", "-m", "prompiler.mcp", "--transport", "http"]

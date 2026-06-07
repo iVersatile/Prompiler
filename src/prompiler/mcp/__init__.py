@@ -1,6 +1,10 @@
 """MCP integration surface for prompiler.
 
-P0 ships only the loopback ``/healthz`` skeleton (``server`` module).
-Tool registration, resource handlers, and stdio transport land in P6
-per ``docs/PLAN.md`` §3.
+``server`` keeps the P0 loopback ``/healthz`` skeleton. P6 adds ``app`` —
+``build_mcp`` wires every registered spec into a FastMCP server (one tool per
+spec plus ``prompiler://specs`` and ``prompiler://artefacts`` resources).
 """
+
+from prompiler.mcp.app import build_mcp
+
+__all__ = ["build_mcp"]
