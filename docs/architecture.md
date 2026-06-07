@@ -459,9 +459,39 @@ Resolution is centralised in `runtime/config.py`. No per-module reads of env var
 
 ### 6.4 Versioning
 
-- Semantic versioning on the public API surface (`prompiler.*`, not `_internal.*`).
-- `prompiler.version` exposed and stamped into every `spec_hash`.
-- Spec format carries its own `spec_version: 1`; bumping the spec format is a major version event for `prompiler`.
+`prompiler` follows [Semantic Versioning 2.0.0](https://semver.org/). The version is
+`MAJOR.MINOR.PATCH`; the first public release is `0.1.0`.
+
+**Scope of the contract — the public surface only.** Semver guarantees apply to:
+
+- The public Python API: everything re-exported from `prompiler` (`compile`, `run`,
+  `run_batch`, `run_sync`, `ArtefactBundle`, `COMPILER_PROTOCOL_VERSION`, `__version__`)
+  plus the documented `prompiler.spec` and `prompiler.runtime` roots.
+- The CLI command surface and its documented flags.
+- The on-disk EntitySpec grammar (`spec_version`).
+- The canonical artefact layout and the `spec_hash` derivation.
+
+Anything under `_internal.*`, modules prefixed with `_`, and undocumented helpers are
+**not** part of the contract and may change in any release.
+
+**What each bump means:**
+
+| Bump | Trigger |
+|------|---------|
+| **MAJOR** | Any backward-incompatible change to the public surface above. Includes removing/renaming a public symbol or CLI flag, changing artefact output for an unchanged spec, or bumping `spec_version` (e.g. `1` → `2`). A `spec_version` bump is always a MAJOR event because it invalidates cached `spec_hash` values. |
+| **MINOR** | Backward-compatible additions: new public functions/classes, new CLI commands or optional flags, new adapters, new optional spec fields with safe defaults. |
+| **PATCH** | Backward-compatible bug fixes and internal changes that leave the public surface and artefact bytes unchanged. |
+
+**Pre-1.0 caveat.** While `MAJOR` is `0`, the public API is still stabilising: a MINOR
+bump (`0.1` → `0.2`) may carry breaking changes. Breaking changes will be called out in
+the changelog. From `1.0.0` onward the table above is strict.
+
+**Stamping.** `prompiler.__version__` is exposed at runtime and stamped into every
+`spec_hash` alongside `COMPILER_PROTOCOL_VERSION`. `COMPILER_PROTOCOL_VERSION` is bumped
+independently and only when a change would alter the canonical artefact produced from an
+unchanged spec (AST grammar, per-adapter projection schema, or canonical-YAML hashing
+rules); routine releases that do not touch those leave it untouched so cached artefacts
+remain valid across upgrades.
 
 ### 6.5 Docs Surface
 
