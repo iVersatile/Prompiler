@@ -6,7 +6,9 @@ Spec-to-artefact prompt compiler with multi-vendor adapters and MCP server.
 
 ## Status
 
-Pre-alpha. Phase P0 (bootstrap). See [`docs/PLAN.md`](docs/PLAN.md) for the roadmap and [`docs/PRD.md`](docs/PRD.md) for the product spec.
+`0.1.0` — first public release (Phase P8: hardening, docs, release). See [`docs/PLAN.md`](docs/PLAN.md) for the roadmap and [`docs/PRD.md`](docs/PRD.md) for the product spec.
+
+New here? Start with the [Tutorial](docs/TUTORIAL.md) for a cold-install-to-extraction walkthrough, then the [Python API reference](docs/API.md).
 
 ## Requirements
 
