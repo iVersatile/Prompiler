@@ -50,6 +50,12 @@ the same virtualenv pre-commit runs in, or pin it via a managed environment
 
 Project rules live in [`docs/RULES.md`](docs/RULES.md). The pre-commit gate (ruff, mypy, pytest -m unit with coverage) runs on `git commit`. See [`docs/MANUAL_TESTING.md`](docs/MANUAL_TESTING.md) for the test tiers and [`CLAUDE.md`](CLAUDE.md) for the agent-facing entry point.
 
+The CLI reference at [`docs/CLI.md`](docs/CLI.md) is generated from the Typer app — do not edit it by hand. Regenerate it after changing any command surface:
+
+```bash
+uv run typer src/prompiler/cli.py utils docs --name prompiler --output docs/CLI.md
+```
+
 ## License
 
 Apache-2.0. See [`LICENSE`](LICENSE).
