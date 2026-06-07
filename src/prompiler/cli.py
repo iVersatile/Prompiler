@@ -187,6 +187,12 @@ def eval_cmd(
         str | None,
         typer.Option(help="Expected spec_hash; a mismatch emits a WARN."),
     ] = None,
+    telemetry: Annotated[
+        bool,
+        typer.Option(
+            help="Export OpenTelemetry spans for each backend call (OFF by default).",
+        ),
+    ] = False,
 ) -> None:
     """Run a spec against a fixture and emit metrics reports."""
     raise typer.Exit(
@@ -200,6 +206,7 @@ def eval_cmd(
             html_out=html_out,
             timeout=timeout,
             expect_hash=expect_hash,
+            telemetry=telemetry,
         )
     )
 
@@ -329,18 +336,25 @@ def _build_eval_backend(
     backend: str,
     model: str | None,
     base_url: str | None,
+    *,
+    telemetry: bool = False,
 ) -> tuple[object, CapturingHook | None, str]:
     if backend == "mock":
         from prompiler.backends.mock import MockAdapter
 
         return MockAdapter(), None, model or "mock"
 
-    from prompiler.backends.observability import FanOutHook
+    from prompiler.backends.observability import FanOutHook, ObservabilityHook
     from prompiler.backends.ollama import DEFAULT_MODEL, OllamaAdapter
+    from prompiler.telemetry import build_telemetry_hook
     from prompiler.usage import FileUsageHook
 
     hook = CapturingHook()
-    fan_out = FanOutHook([hook, FileUsageHook(default_usage_log_path())])
+    hooks: list[ObservabilityHook] = [hook, FileUsageHook(default_usage_log_path())]
+    otel = build_telemetry_hook(enabled=telemetry)
+    if otel is not None:
+        hooks.append(otel)
+    fan_out = FanOutHook(hooks)
     kwargs: dict[str, object] = {"observability": fan_out}
     resolved_model = model or DEFAULT_MODEL
     kwargs["model"] = resolved_model
@@ -360,6 +374,7 @@ def _cmd_eval(
     html_out: Path | None,
     timeout: float | None,
     expect_hash: str | None,
+    telemetry: bool = False,
 ) -> int:
     if not spec_path.is_file():
         sys.stderr.write(f"prompiler eval: spec not found: {spec_path}\n")
@@ -388,7 +403,9 @@ def _cmd_eval(
             spec_hash,
         )
 
-    adapter, hook, resolved_model = _build_eval_backend(backend, model, base_url)
+    adapter, hook, resolved_model = _build_eval_backend(
+        backend, model, base_url, telemetry=telemetry
+    )
     try:
         result = run_eval(
             spec.name,

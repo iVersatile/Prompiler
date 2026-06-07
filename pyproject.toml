@@ -29,6 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 adc = ["google-auth>=2.0"]
+telemetry = ["opentelemetry-api>=1.27", "opentelemetry-sdk>=1.27"]
 
 [project.scripts]
 prompiler = "prompiler.cli:main"
@@ -47,6 +48,8 @@ dev = [
     "pre-commit>=3.5.0",
     "types-PyYAML>=6.0",
     "types-jsonschema>=4.23",
+    "opentelemetry-api>=1.27",
+    "opentelemetry-sdk>=1.27",
 ]
 
 [build-system]
