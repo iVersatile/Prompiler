@@ -1,0 +1,51 @@
+spec_version: 1
+name: incident_event
+task: extract
+description: Extract structured details of an operational incident from a report.
+max_input_tokens: 6000
+fields:
+  - name: incident_ref
+    type: string
+    required: true
+    description: Incident tracking identifier from the report header.
+    pattern: "^INC-[0-9]{4,}$"
+  - name: detected_at
+    type: datetime
+    required: true
+    description: Timestamp the incident was first detected, in ISO 8601 form.
+  - name: severity
+    type: enum
+    required: true
+    description: Assessed severity level of the incident.
+    values:
+      - low
+      - medium
+      - high
+      - critical
+  - name: is_resolved
+    type: boolean
+    required: true
+    description: Whether the incident has been resolved.
+  - name: affected_services
+    type: array
+    required: true
+    description: Services impacted by the incident.
+    item:
+      type: string
+      description: Name of one affected service.
+  - name: timeline
+    type: array
+    required: false
+    description: Chronological log of notable events during the incident.
+    item:
+      type: object
+      description: A single timestamped timeline entry.
+      fields:
+        - name: occurred_at
+          type: datetime
+          required: true
+          description: When this timeline entry occurred, in ISO 8601 form.
+        - name: note
+          type: string
+          required: true
+          description: Human-readable description of what happened.
