@@ -29,6 +29,7 @@ from prompiler.backends.gemini import GeminiAdapter
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
     BackendCallMetrics,
+    FanOutHook,
     PricingEntry,
     PricingTable,
     emit_call_metrics,
@@ -432,3 +433,52 @@ def test_adapter_does_not_emit_on_non_retriable_failure(
     asyncio.run(adapter.aclose())
 
     assert hook.calls == []
+
+
+def _metrics(**over: object) -> BackendCallMetrics:
+    base: dict[str, object] = {
+        "backend": "claude",
+        "model": "claude-haiku-4-5-20251001",
+        "latency_seconds": 0.1,
+        "prompt_tokens": 100,
+        "completion_tokens": 50,
+        "cost_usd": 0.001,
+    }
+    base.update(over)
+    return BackendCallMetrics(**base)  # type: ignore[arg-type]
+
+
+@pytest.mark.unit
+def test_fan_out_hook_forwards_to_all_children() -> None:
+    h1 = _RecordingHook()
+    h2 = _RecordingHook()
+    fan = FanOutHook([h1, h2])
+    m = _metrics()
+
+    asyncio.run(fan.on_call(m))
+
+    assert h1.calls == [m]
+    assert h2.calls == [m]
+
+
+@pytest.mark.unit
+def test_fan_out_hook_preserves_order() -> None:
+    order: list[str] = []
+
+    class _Marker:
+        def __init__(self, tag: str) -> None:
+            self._tag = tag
+
+        async def on_call(self, _metrics: BackendCallMetrics) -> None:
+            order.append(self._tag)
+
+    fan = FanOutHook([_Marker("a"), _Marker("b"), _Marker("c")])
+    asyncio.run(fan.on_call(_metrics()))
+
+    assert order == ["a", "b", "c"]
+
+
+@pytest.mark.unit
+def test_fan_out_hook_empty_is_noop() -> None:
+    fan = FanOutHook([])
+    asyncio.run(fan.on_call(_metrics()))

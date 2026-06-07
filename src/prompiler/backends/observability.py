@@ -11,7 +11,7 @@ satisfies it — no inheritance required.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -29,6 +29,21 @@ class BackendCallMetrics:
 @runtime_checkable
 class ObservabilityHook(Protocol):
     async def on_call(self, metrics: BackendCallMetrics) -> None: ...
+
+
+class FanOutHook:
+    """Forward each call to several child hooks in order.
+
+    Lets one adapter feed metrics to multiple sinks (e.g. an in-memory
+    capturing hook for eval plus a file sink for ``prompiler stats``).
+    """
+
+    def __init__(self, hooks: Sequence[ObservabilityHook]) -> None:
+        self._hooks = tuple(hooks)
+
+    async def on_call(self, metrics: BackendCallMetrics) -> None:
+        for hook in self._hooks:
+            await hook.on_call(metrics)
 
 
 @dataclass(frozen=True)

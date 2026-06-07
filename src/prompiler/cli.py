@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated
@@ -39,6 +40,13 @@ from prompiler.runtime.errors import AdapterError, EvalError
 from prompiler.runtime.registry import register_from_path
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
+from prompiler.usage import (
+    default_usage_log_path,
+    format_summary,
+    parse_since,
+    read_usage,
+    summarize,
+)
 
 _log = get_logger(__name__)
 
@@ -235,6 +243,23 @@ def refine(
     )
 
 
+@app.command()
+def stats(
+    since: Annotated[
+        str,
+        typer.Option(help="Lookback window: e.g. 7d, 24h, 30m, 2w (default: 7d)."),
+    ] = "7d",
+    log: Annotated[
+        Path | None,
+        typer.Option(
+            help="Usage-log path override (default: $PROMPILER_USAGE_LOG or .prompiler/usage.jsonl).",  # noqa: E501
+        ),
+    ] = None,
+) -> None:
+    """Summarise recorded backend usage over a recent time window."""
+    raise typer.Exit(_cmd_stats(since=since, log=log))
+
+
 def _iter_spec_files(path: Path) -> list[Path]:
     if path.is_file():
         return [path]
@@ -309,10 +334,13 @@ def _build_eval_backend(
 
         return MockAdapter(), None, model or "mock"
 
+    from prompiler.backends.observability import FanOutHook
     from prompiler.backends.ollama import DEFAULT_MODEL, OllamaAdapter
+    from prompiler.usage import FileUsageHook
 
     hook = CapturingHook()
-    kwargs: dict[str, object] = {"observability": hook}
+    fan_out = FanOutHook([hook, FileUsageHook(default_usage_log_path())])
+    kwargs: dict[str, object] = {"observability": fan_out}
     resolved_model = model or DEFAULT_MODEL
     kwargs["model"] = resolved_model
     if base_url is not None:
@@ -432,6 +460,20 @@ def _cmd_refine(
         asyncio.run(adapter.aclose())  # type: ignore[attr-defined]
 
     sys.stdout.write(diff)
+    return 0
+
+
+def _cmd_stats(*, since: str, log: Path | None) -> int:
+    try:
+        window = parse_since(since)
+    except ValueError as exc:
+        sys.stderr.write(f"prompiler stats: {exc}\n")
+        return 1
+
+    path = log if log is not None else default_usage_log_path()
+    records = read_usage(path)
+    summary = summarize(records, since=window, now=datetime.now(UTC))
+    sys.stdout.write(format_summary(summary) + "\n")
     return 0
 
 
