@@ -1,6 +1,8 @@
 """prompiler CLI entry point.
 
-P0 stub. Real subcommands land in P1+ once the EntitySpec parser exists.
+P7 migrates the command surface from argparse to typer. Command names, flags,
+exit codes, and diagnostic strings are preserved byte-identically so the P0/P1
+contract in ``tests/test_cli.py`` holds unchanged.
 
 Wired in pyproject.toml as ``[project.scripts] prompiler = "prompiler.cli:main"``
 so ``uv run prompiler ...`` resolves here. Also invoked by the
@@ -10,11 +12,16 @@ which calls ``uv run prompiler validate prompts/`` on every commit.
 
 from __future__ import annotations
 
-import argparse
 import asyncio
 import json
 import sys
+from datetime import UTC, datetime
+from enum import StrEnum
 from pathlib import Path
+from typing import Annotated
+
+import click
+import typer
 
 from prompiler import __version__
 from prompiler.codegen import write as codegen_write
@@ -28,172 +35,237 @@ from prompiler.eval import (
 )
 from prompiler.mcp.server import LOOPBACK_HOST, build_server
 from prompiler.obs import configure_logging, get_logger
+from prompiler.pricing import load_pricing
 from prompiler.refine import propose_patch_sync
 from prompiler.runtime.errors import AdapterError, EvalError
 from prompiler.runtime.registry import register_from_path
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
+from prompiler.usage import (
+    default_usage_log_path,
+    format_summary,
+    parse_since,
+    read_usage,
+    summarize,
+)
 
 _log = get_logger(__name__)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="prompiler",
-        description="prompiler — spec-to-artefact prompt compiler.",
-    )
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"prompiler {__version__}",
-    )
-    subparsers = parser.add_subparsers(dest="command")
+class _Backend(StrEnum):
+    mock = "mock"
+    ollama = "ollama"
 
-    validate = subparsers.add_parser(
-        "validate",
-        help="Validate prompt specs under the given path (load + lint).",
-    )
-    validate.add_argument(
-        "path",
-        type=Path,
-        help="Spec file or directory of prompt specs to validate.",
+
+class _Transport(StrEnum):
+    http = "http"
+
+
+app = typer.Typer(
+    name="prompiler",
+    help="prompiler — spec-to-artefact prompt compiler.",
+    add_completion=False,
+    no_args_is_help=False,
+)
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        sys.stdout.write(f"prompiler {__version__}\n")
+        raise SystemExit(0)
+
+
+@app.callback(invoke_without_command=True)
+def _root(
+    ctx: typer.Context,
+    _version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            callback=_version_callback,
+            is_eager=True,
+            help="Show the prompiler version and exit.",
+        ),
+    ] = False,
+) -> None:
+    if ctx.invoked_subcommand is None:
+        sys.stdout.write(ctx.get_help())
+        raise typer.Exit(0)
+
+
+@app.command()
+def validate(
+    path: Annotated[
+        Path,
+        typer.Argument(help="Spec file or directory of prompt specs to validate."),
+    ],
+) -> None:
+    """Validate prompt specs under the given path (load + lint)."""
+    raise typer.Exit(_cmd_validate(path))
+
+
+@app.command()
+def codegen(
+    spec: Annotated[
+        Path,
+        typer.Argument(help="Path to the spec YAML file to render."),
+    ],
+    out_dir: Annotated[
+        Path,
+        typer.Option(
+            "-o",
+            "--out-dir",
+            help="Output directory for the generated module (default: .prompiler/compiled).",
+        ),
+    ] = Path(".prompiler/compiled"),
+) -> None:
+    """Render a spec to a standalone vendored Python module."""
+    raise typer.Exit(_cmd_codegen(spec, out_dir))
+
+
+@app.command()
+def serve(
+    transport: Annotated[
+        _Transport,
+        typer.Option(help="Transport for MCP server (only 'http' supported in P0)."),
+    ] = _Transport.http,
+    host: Annotated[
+        str,
+        typer.Option(help=f"Bind host (default: {LOOPBACK_HOST})."),
+    ] = LOOPBACK_HOST,
+    port: Annotated[
+        int,
+        typer.Option(help="Bind port (default: 8765; 0 selects an ephemeral port)."),
+    ] = 8765,
+    allow_non_loopback: Annotated[
+        bool,
+        typer.Option(
+            "--allow-non-loopback",
+            help="Opt-in to bind a non-loopback host (emits WARN).",
+        ),
+    ] = False,
+) -> None:
+    """Run the MCP skeleton HTTP server (P0 healthz only)."""
+    raise typer.Exit(_cmd_serve(host, port, allow_non_loopback=allow_non_loopback))
+
+
+@app.command("eval")
+def eval_cmd(
+    spec: Annotated[
+        Path,
+        typer.Argument(help="Path to the spec YAML file to evaluate."),
+    ],
+    fixtures: Annotated[
+        Path,
+        typer.Argument(help="Path to the eval fixture YAML file."),
+    ],
+    backend: Annotated[
+        _Backend,
+        typer.Option(help="Backend to run the eval against (default: ollama)."),
+    ] = _Backend.ollama,
+    model: Annotated[
+        str | None,
+        typer.Option(help="Model name override for the backend."),
+    ] = None,
+    base_url: Annotated[
+        str | None,
+        typer.Option(help="Base URL override for the ollama backend."),
+    ] = None,
+    json_out: Annotated[
+        Path | None,
+        typer.Option(help="Write the eval-report.json to this path."),
+    ] = None,
+    html_out: Annotated[
+        Path | None,
+        typer.Option(help="Write the eval-report.html dashboard to this path."),
+    ] = None,
+    timeout: Annotated[
+        float | None,
+        typer.Option(help="Per-call timeout in seconds."),
+    ] = None,
+    expect_hash: Annotated[
+        str | None,
+        typer.Option(help="Expected spec_hash; a mismatch emits a WARN."),
+    ] = None,
+    telemetry: Annotated[
+        bool,
+        typer.Option(
+            help="Export OpenTelemetry spans for each backend call (OFF by default).",
+        ),
+    ] = False,
+) -> None:
+    """Run a spec against a fixture and emit metrics reports."""
+    raise typer.Exit(
+        _cmd_eval(
+            spec,
+            fixtures,
+            backend=backend.value,
+            model=model,
+            base_url=base_url,
+            json_out=json_out,
+            html_out=html_out,
+            timeout=timeout,
+            expect_hash=expect_hash,
+            telemetry=telemetry,
+        )
     )
 
-    codegen = subparsers.add_parser(
-        "codegen",
-        help="Render a spec to a standalone vendored Python module.",
-    )
-    codegen.add_argument(
-        "spec",
-        type=Path,
-        help="Path to the spec YAML file to render.",
-    )
-    codegen.add_argument(
-        "-o",
-        "--out-dir",
-        type=Path,
-        default=Path(".prompiler/compiled"),
-        help="Output directory for the generated module (default: .prompiler/compiled).",
+
+@app.command()
+def refine(
+    report: Annotated[
+        Path,
+        typer.Argument(help="Path to the eval-report.json to refine against."),
+    ],
+    prompt: Annotated[
+        Path,
+        typer.Argument(help="Path to the prompt text file to propose a diff over."),
+    ],
+    backend: Annotated[
+        _Backend,
+        typer.Option(help="Tutor backend (default: ollama)."),
+    ] = _Backend.ollama,
+    model: Annotated[
+        str | None,
+        typer.Option(help="Model name override for the backend."),
+    ] = None,
+    base_url: Annotated[
+        str | None,
+        typer.Option(help="Base URL override for the ollama backend."),
+    ] = None,
+    timeout: Annotated[
+        float | None,
+        typer.Option(help="Per-call timeout in seconds."),
+    ] = None,
+) -> None:
+    """Propose a prompt edit from an eval report (tutor diff to stdout)."""
+    raise typer.Exit(
+        _cmd_refine(
+            report,
+            prompt,
+            backend=backend.value,
+            model=model,
+            base_url=base_url,
+            timeout=timeout,
+        )
     )
 
-    serve = subparsers.add_parser(
-        "serve",
-        help="Run the MCP skeleton HTTP server (P0 healthz only).",
-    )
-    serve.add_argument(
-        "--transport",
-        choices=["http"],
-        default="http",
-        help="Transport for MCP server (only 'http' supported in P0).",
-    )
-    serve.add_argument(
-        "--host",
-        default=LOOPBACK_HOST,
-        help=f"Bind host (default: {LOOPBACK_HOST}).",
-    )
-    serve.add_argument(
-        "--port",
-        type=int,
-        default=8765,
-        help="Bind port (default: 8765; 0 selects an ephemeral port).",
-    )
-    serve.add_argument(
-        "--allow-non-loopback",
-        action="store_true",
-        help="Opt-in to bind a non-loopback host (emits WARN).",
-    )
 
-    eval_cmd = subparsers.add_parser(
-        "eval",
-        help="Run a spec against a fixture and emit metrics reports.",
-    )
-    eval_cmd.add_argument(
-        "spec",
-        type=Path,
-        help="Path to the spec YAML file to evaluate.",
-    )
-    eval_cmd.add_argument(
-        "fixtures",
-        type=Path,
-        help="Path to the eval fixture YAML file.",
-    )
-    eval_cmd.add_argument(
-        "--backend",
-        choices=["mock", "ollama"],
-        default="ollama",
-        help="Backend to run the eval against (default: ollama).",
-    )
-    eval_cmd.add_argument(
-        "--model",
-        default=None,
-        help="Model name override for the backend.",
-    )
-    eval_cmd.add_argument(
-        "--base-url",
-        default=None,
-        help="Base URL override for the ollama backend.",
-    )
-    eval_cmd.add_argument(
-        "--json-out",
-        type=Path,
-        default=None,
-        help="Write the eval-report.json to this path.",
-    )
-    eval_cmd.add_argument(
-        "--html-out",
-        type=Path,
-        default=None,
-        help="Write the eval-report.html dashboard to this path.",
-    )
-    eval_cmd.add_argument(
-        "--timeout",
-        type=float,
-        default=None,
-        help="Per-call timeout in seconds.",
-    )
-    eval_cmd.add_argument(
-        "--expect-hash",
-        default=None,
-        help="Expected spec_hash; a mismatch emits a WARN.",
-    )
-
-    refine = subparsers.add_parser(
-        "refine",
-        help="Propose a prompt edit from an eval report (tutor diff to stdout).",
-    )
-    refine.add_argument(
-        "report",
-        type=Path,
-        help="Path to the eval-report.json to refine against.",
-    )
-    refine.add_argument(
-        "prompt",
-        type=Path,
-        help="Path to the prompt text file to propose a diff over.",
-    )
-    refine.add_argument(
-        "--backend",
-        choices=["mock", "ollama"],
-        default="ollama",
-        help="Tutor backend (default: ollama).",
-    )
-    refine.add_argument(
-        "--model",
-        default=None,
-        help="Model name override for the backend.",
-    )
-    refine.add_argument(
-        "--base-url",
-        default=None,
-        help="Base URL override for the ollama backend.",
-    )
-    refine.add_argument(
-        "--timeout",
-        type=float,
-        default=None,
-        help="Per-call timeout in seconds.",
-    )
-    return parser
+@app.command()
+def stats(
+    since: Annotated[
+        str,
+        typer.Option(help="Lookback window: e.g. 7d, 24h, 30m, 2w (default: 7d)."),
+    ] = "7d",
+    log: Annotated[
+        Path | None,
+        typer.Option(
+            help="Usage-log path override (default: $PROMPILER_USAGE_LOG or .prompiler/usage.jsonl).",  # noqa: E501
+        ),
+    ] = None,
+) -> None:
+    """Summarise recorded backend usage over a recent time window."""
+    raise typer.Exit(_cmd_stats(since=since, log=log))
 
 
 def _iter_spec_files(path: Path) -> list[Path]:
@@ -264,16 +336,26 @@ def _build_eval_backend(
     backend: str,
     model: str | None,
     base_url: str | None,
+    *,
+    telemetry: bool = False,
 ) -> tuple[object, CapturingHook | None, str]:
     if backend == "mock":
         from prompiler.backends.mock import MockAdapter
 
         return MockAdapter(), None, model or "mock"
 
+    from prompiler.backends.observability import FanOutHook, ObservabilityHook
     from prompiler.backends.ollama import DEFAULT_MODEL, OllamaAdapter
+    from prompiler.telemetry import build_telemetry_hook
+    from prompiler.usage import FileUsageHook
 
     hook = CapturingHook()
-    kwargs: dict[str, object] = {"observability": hook}
+    hooks: list[ObservabilityHook] = [hook, FileUsageHook(default_usage_log_path())]
+    otel = build_telemetry_hook(enabled=telemetry)
+    if otel is not None:
+        hooks.append(otel)
+    fan_out = FanOutHook(hooks)
+    kwargs: dict[str, object] = {"observability": fan_out}
     resolved_model = model or DEFAULT_MODEL
     kwargs["model"] = resolved_model
     if base_url is not None:
@@ -292,6 +374,7 @@ def _cmd_eval(
     html_out: Path | None,
     timeout: float | None,
     expect_hash: str | None,
+    telemetry: bool = False,
 ) -> int:
     if not spec_path.is_file():
         sys.stderr.write(f"prompiler eval: spec not found: {spec_path}\n")
@@ -320,7 +403,9 @@ def _cmd_eval(
             spec_hash,
         )
 
-    adapter, hook, resolved_model = _build_eval_backend(backend, model, base_url)
+    adapter, hook, resolved_model = _build_eval_backend(
+        backend, model, base_url, telemetry=telemetry
+    )
     try:
         result = run_eval(
             spec.name,
@@ -396,42 +481,36 @@ def _cmd_refine(
     return 0
 
 
+def _cmd_stats(*, since: str, log: Path | None) -> int:
+    try:
+        window = parse_since(since)
+    except ValueError as exc:
+        sys.stderr.write(f"prompiler stats: {exc}\n")
+        return 1
+
+    for warning in load_pricing().warnings:
+        sys.stderr.write(f"prompiler stats: warning: {warning}\n")
+
+    path = log if log is not None else default_usage_log_path()
+    records = read_usage(path)
+    summary = summarize(records, since=window, now=datetime.now(UTC))
+    sys.stdout.write(format_summary(summary) + "\n")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging()
-    parser = _build_parser()
-    args = parser.parse_args(argv)
-
-    if args.command == "validate":
-        return _cmd_validate(args.path)
-    if args.command == "codegen":
-        return _cmd_codegen(args.spec, args.out_dir)
-    if args.command == "serve":
-        return _cmd_serve(args.host, args.port, allow_non_loopback=args.allow_non_loopback)
-    if args.command == "eval":
-        return _cmd_eval(
-            args.spec,
-            args.fixtures,
-            backend=args.backend,
-            model=args.model,
-            base_url=args.base_url,
-            json_out=args.json_out,
-            html_out=args.html_out,
-            timeout=args.timeout,
-            expect_hash=args.expect_hash,
-        )
-
-    if args.command == "refine":
-        return _cmd_refine(
-            args.report,
-            args.prompt,
-            backend=args.backend,
-            model=args.model,
-            base_url=args.base_url,
-            timeout=args.timeout,
-        )
-
-    parser.print_help()
-    return 0
+    command = typer.main.get_command(app)
+    try:
+        return command(args=argv, standalone_mode=False) or 0
+    except click.exceptions.Exit as exc:
+        return int(exc.exit_code)
+    except click.exceptions.Abort:
+        sys.stderr.write("Aborted!\n")
+        return 1
+    except click.exceptions.ClickException as exc:
+        exc.show()
+        return int(exc.exit_code)
 
 
 if __name__ == "__main__":
