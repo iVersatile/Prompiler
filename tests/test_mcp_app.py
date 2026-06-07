@@ -125,6 +125,14 @@ def test_specs_resource_rejects_unknown_name() -> None:
 
 
 @pytest.mark.unit
+def test_artefacts_resource_rejects_unknown_name() -> None:
+    reg = _registry(INVOICE_SPEC)
+    mcp = build_mcp(reg, ScriptedAdapter([]))
+    with pytest.raises(Exception):  # noqa: B017 — any miss is acceptable, not a silent hit
+        _run(mcp.read_resource("prompiler://artefacts/nope"))
+
+
+@pytest.mark.unit
 def test_tool_rejects_oversized_text() -> None:
     reg = _registry(INVOICE_SPEC)
     backend = ScriptedAdapter([{"total": "10.00"}])

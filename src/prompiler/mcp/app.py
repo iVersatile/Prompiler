@@ -79,7 +79,10 @@ def build_mcp(
 
     @mcp.resource("prompiler://artefacts/{spec_name}", mime_type=_ARTEFACT_MIME)
     def _artefact_resource(spec_name: str) -> str:
-        bundle = registry.get(spec_name)
+        try:
+            bundle = registry.get(spec_name)
+        except KeyError as err:
+            raise KeyError(f"no artefact bundle for {spec_name!r}") from err
         return json.dumps(
             {
                 "prompt": bundle.prompt,
