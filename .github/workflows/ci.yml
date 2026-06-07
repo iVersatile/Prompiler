@@ -11,6 +11,11 @@
 # model so backend adapter tests can hit a real wire. The e2e job still treats
 # pytest's exit code 5 ("no tests collected") as success until later phases
 # populate the e2e marker.
+#
+# The `perf` job asserts the hermetic PRD §7.1 budgets (compile, validate). It is
+# deliberately NOT a required check: timing on shared runners jitters, and the
+# best-of-N(min) strategy keeps it stable enough to surface regressions without
+# gating merges on a preempted sample.
 name: CI
 
 on:
@@ -167,3 +172,27 @@ jobs:
             exit 0
           fi
           exit "$code"
+
+  perf:
+    name: perf
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run perf tier (PRD §7.1 hermetic budgets)
+        run: uv run pytest -m perf -q
