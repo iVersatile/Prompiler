@@ -273,22 +273,24 @@ Phase-done (RULES §7): user approved 2026-06-07. §9 local gate green — unit 
 
 **Tasks**
 
-- Full CLI surface from `PRD.md` §FR-9 (typer-based).
-- `prompiler stats` reading local JSONL log.
-- Cost estimate using shipped pricing table (`pricing/v1.json`).
-- OpenTelemetry exporter behind `--telemetry` flag (off by default).
-- Pre-commit hook config snippet documented for downstream projects.
+- [x] Full CLI surface from `PRD.md` §FR-9 (typer-based).
+- [x] `prompiler stats` reading local JSONL log.
+- [x] Cost estimate using shipped pricing table (`pricing/v1.json`).
+- [x] OpenTelemetry exporter behind `--telemetry` flag (off by default).
+- [x] Pre-commit hook config snippet documented for downstream projects.
 
 **Acceptance criteria**
 
-- All CLI commands have `--help` text and exit codes per Unix convention (0 ok, 1 user error, 2 internal error).
-- `prompiler stats --since 7d` outputs a usage summary.
-- Pricing table missing or stale produces a warning, never a hard failure.
+- [x] All CLI commands have `--help` text and exit codes per Unix convention (0 ok, 1 user error, 2 internal error). — subprocess E2E asserts per-command `--help` exit 0; validate 0/1/2, stats 0/1, codegen 2 (`test_e2e_cli.py`).
+- [x] `prompiler stats --since 7d` outputs a usage summary. — `test_cli_stats.py` + E2E 7d-window summary assertion.
+- [x] Pricing table missing or stale produces a warning, never a hard failure. — degrade-never loader warns on missing/schema-mismatch (`test_pricing_loader.py`).
 
 **Definition of done**
 
-- CLI E2E suite (subprocess-based) green in CI.
-- Man-page-style docs generated from typer.
+- [x] CLI E2E suite (subprocess-based) green in CI. — `test_e2e_cli.py`, e2e job green on PR #25 + main.
+- [x] Man-page-style docs generated from typer. — `docs/CLI.md` regenerated via `typer ... utils docs`; regen note in README.
+
+Phase-done (RULES §7): user approved 2026-06-08. PR #25 merged to main (`4a2ff3d`); remote CI green on main (pre-commit, unit, integration, e2e). All tasks + acceptance + DoD met.
 
 ---
 
