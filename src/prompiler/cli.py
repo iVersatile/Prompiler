@@ -35,6 +35,7 @@ from prompiler.eval import (
 )
 from prompiler.mcp.server import LOOPBACK_HOST, build_server
 from prompiler.obs import configure_logging, get_logger
+from prompiler.pricing import load_pricing
 from prompiler.refine import propose_patch_sync
 from prompiler.runtime.errors import AdapterError, EvalError
 from prompiler.runtime.registry import register_from_path
@@ -469,6 +470,9 @@ def _cmd_stats(*, since: str, log: Path | None) -> int:
     except ValueError as exc:
         sys.stderr.write(f"prompiler stats: {exc}\n")
         return 1
+
+    for warning in load_pricing().warnings:
+        sys.stderr.write(f"prompiler stats: warning: {warning}\n")
 
     path = log if log is not None else default_usage_log_path()
     records = read_usage(path)
