@@ -1,0 +1,48 @@
+spec_version: 1
+name: contract_obligation
+task: extract
+description: Extract a single obligation clause from a contract document.
+cite: true
+max_input_tokens: 6000
+fields:
+  - name: clause_reference
+    type: string
+    required: true
+    description: Clause identifier as printed in the contract.
+    pattern: "^[0-9]+(\\.[0-9]+)*$"
+  - name: obligor
+    type: string
+    required: true
+    description: Party bound to perform the obligation.
+  - name: obligation_type
+    type: enum
+    required: true
+    description: Nature of the obligation imposed by the clause.
+    values:
+      - payment
+      - delivery
+      - reporting
+      - confidentiality
+  - name: due_date
+    type: date
+    required: false
+    description: Date by which the obligation must be performed, in ISO 8601 form.
+  - name: is_recurring
+    type: boolean
+    required: true
+    description: Whether the obligation repeats on a schedule.
+  - name: penalty
+    type: object
+    required: false
+    description: Penalty applied on breach of the obligation.
+    fields:
+      - name: amount
+        type: decimal
+        required: true
+        description: Penalty amount in the contract currency.
+        minimum: 0
+      - name: currency
+        type: string
+        required: true
+        description: ISO 4217 currency code for the penalty amount.
+        pattern: "^[A-Z]{3}$"

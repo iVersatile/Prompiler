@@ -1,0 +1,45 @@
+spec_version: 1
+name: citation
+task: extract
+description: Extract a structured bibliographic citation from a reference entry.
+max_input_tokens: 4000
+fields:
+  - name: source_title
+    type: string
+    required: true
+    description: Title of the cited work.
+  - name: authors
+    type: array
+    required: true
+    description: Authors credited on the work, in listed order.
+    item:
+      type: string
+      description: A single author's full name.
+  - name: published_at
+    type: datetime
+    required: false
+    description: Publication timestamp in ISO 8601 form.
+  - name: source_type
+    type: enum
+    required: true
+    description: Category of the cited source.
+    values:
+      - book
+      - journal
+      - conference
+      - web
+  - name: page_range
+    type: object
+    required: false
+    description: Inclusive page span of the cited material.
+    fields:
+      - name: start_page
+        type: integer
+        required: true
+        description: First page of the cited range.
+        minimum: 1
+      - name: end_page
+        type: integer
+        required: true
+        description: Last page of the cited range.
+        minimum: 1
