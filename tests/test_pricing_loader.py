@@ -128,3 +128,37 @@ def test_malformed_valid_until_warns_and_falls_back(tmp_path) -> None:
 
     assert load.table.rates == DEFAULT_PRICING_TABLE.rates
     assert len(load.warnings) == 1
+
+
+@pytest.mark.parametrize(
+    "make_file",
+    [
+        pytest.param(lambda d: d / "v1.json", id="missing"),
+        pytest.param(lambda d: _touch(d / "v1.json", "{not valid json"), id="malformed-json"),
+        pytest.param(
+            lambda d: _touch(
+                d / "v1.json",
+                json.dumps({"valid_until": "2020-01-01", "rates": _DEFAULT_RATES}),
+            ),
+            id="expired",
+        ),
+    ],
+)
+def test_warning_never_leaks_full_path(tmp_path, make_file) -> None:
+    """Warnings name only the basename — a secret-bearing parent dir must not leak."""
+    secret_dir = tmp_path / "s3cr3t-token-abc123"
+    secret_dir.mkdir()
+    pfile = make_file(secret_dir)
+
+    load = load_pricing(pfile, today=date(2026, 6, 7))
+
+    assert len(load.warnings) == 1
+    warning = load.warnings[0]
+    assert "s3cr3t-token-abc123" not in warning
+    assert str(secret_dir) not in warning
+    assert "v1.json" in warning
+
+
+def _touch(path, content: str):
+    path.write_text(content, encoding="utf-8")
+    return path

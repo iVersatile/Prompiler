@@ -62,18 +62,18 @@ def load_pricing(path: Path | None = None, *, today: date | None = None) -> Pric
     today = today if today is not None else date.today()
 
     if not resolved.exists():
-        return _fallback(f"pricing table not found at {resolved}; using built-in rates")
+        return _fallback(f"pricing table not found at {resolved.name}; using built-in rates")
 
     try:
         payload = json.loads(resolved.read_text(encoding="utf-8"))
     except (ValueError, OSError):
-        return _fallback(f"pricing table at {resolved} is malformed; using built-in rates")
+        return _fallback(f"pricing table at {resolved.name} is malformed; using built-in rates")
 
     try:
         valid_until = date.fromisoformat(str(payload["valid_until"]))
         rates = _parse_rates(payload["rates"])
     except (KeyError, ValueError, TypeError):
-        return _fallback(f"pricing table at {resolved} is malformed; using built-in rates")
+        return _fallback(f"pricing table at {resolved.name} is malformed; using built-in rates")
 
     table = PricingTable(rates=rates)
     if valid_until < today:
@@ -81,7 +81,7 @@ def load_pricing(path: Path | None = None, *, today: date | None = None) -> Pric
             table=table,
             valid_until=valid_until,
             warnings=(
-                f"pricing table at {resolved} expired on {valid_until.isoformat()}; "
+                f"pricing table at {resolved.name} expired on {valid_until.isoformat()}; "
                 "rates may be stale",
             ),
         )
