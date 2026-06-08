@@ -37,7 +37,8 @@ concurrency:
 env:
   PYTHON_VERSION: "3.11"
   UV_VERSION: "0.4.30"
-  IMAGE_NAME: ghcr.io/${{ github.repository }}
+  # Lowercased: OCI/cosign refs must be lowercase; github.repository is mixed-case.
+  IMAGE_NAME: ghcr.io/iversatile/prompiler
 
 jobs:
   # ---------------------------------------------------------------------------
