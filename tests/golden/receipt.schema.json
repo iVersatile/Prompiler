@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "ReceiptItem": {
+      "additionalProperties": false,
+      "properties": {
+        "amount": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "title": "Amount"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "quantity": {
+          "minimum": 1.0,
+          "title": "Quantity",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "description",
+        "quantity",
+        "amount"
+      ],
+      "title": "ReceiptItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "line_items": {
+      "items": {
+        "$ref": "#/$defs/ReceiptItem"
+      },
+      "title": "Line Items",
+      "type": "array"
+    },
+    "merchant": {
+      "title": "Merchant",
+      "type": "string"
+    },
+    "purchased_at": {
+      "format": "date-time",
+      "title": "Purchased At",
+      "type": "string"
+    },
+    "subtotal": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Subtotal"
+    },
+    "tax": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Tax"
+    },
+    "tip": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tip"
+    },
+    "total": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Total"
+    }
+  },
+  "required": [
+    "merchant",
+    "purchased_at",
+    "line_items",
+    "subtotal",
+    "tax",
+    "total"
+  ],
+  "title": "Receipt",
+  "type": "object"
+}
