@@ -303,7 +303,7 @@ Phase-done (RULES §7): user approved 2026-06-08. PR #25 merged to main (`4a2ff3
 - Evaluate codegen renderer architecture: decide whether to deepen the shared visitor (introduced P1.x) into a full FieldSpec IR module (~1.5d) or stop at FieldSpec-attached helpers (~<1d) or hold as-is. Trigger criteria: a third renderer arrives (e.g., TypeScript emitter, JSON Schema dialect variant), or a codegen-vs-runtime drift incident is recorded in `docs/LESSONS_LEARNT.md`.
 - Documentation: tutorial (invoice walkthrough), reference (CLI + Python API), architecture overview, contributing guide.
 - Example specs: invoice, email_category, citation, contract_obligation, incident_event.
-- Versioning: `prompiler 0.1.0`, semantic-versioning policy documented.
+- Versioning: `prompiler 0.1.1`, semantic-versioning policy documented.
 - Release pipeline:
   - PyPI publish via OIDC trusted publisher.
   - OCI image publish to `ghcr.io/<org>/prompiler:<tag>` (multi-arch buildx), Cosign keyless signature + SBOM (CycloneDX) attestation.
@@ -317,7 +317,7 @@ Phase-done (RULES §7): user approved 2026-06-08. PR #25 merged to main (`4a2ff3
 
 **Definition of done**
 
-- Tagged `v0.1.0` released to PyPI.
+- Tagged `v0.1.1` released to PyPI.
 - Docs published.
 - Demo recording + tutorial walkthrough merged.
 
@@ -369,4 +369,4 @@ Speed budget per tier: unit < 30 s, integration < 2 min, e2e < 5 min, live-smoke
 - All `PRD.md` §7 non-functional requirements asserted in CI.
 - All `PRD.md` §9 success metrics measured and recorded.
 - Apache 2.0 LICENSE, NOTICE, and patent grant present and correct.
-- `pip install prompiler==0.1.0` works on a clean Python 3.11 environment.
+- `pip install prompiler==0.1.1` works on a clean Python 3.11 environment.
