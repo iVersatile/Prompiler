@@ -399,15 +399,38 @@ fixtures_dir = "tests/fixtures"
 
 ---
 
-## 8. Out of Scope (v1)
+## 8. Scope by Version
 
-- Streaming responses.
-- Multi-modal (images, audio).
-- Auto-applying refinement without confirmation.
-- Hosted SaaS UI.
-- Compile-result cache (deferred to v2).
-- Keychain / OAuth credential flows.
-- Spec composition / inheritance (single flat spec only in v1).
+### 8.1 v1 — delivered (`v0.1.1`)
+
+All FR-1..FR-15 above describe the v1 contract as shipped.
+
+### 8.2 v2 — accepted (`v0.2.0`, single batched release)
+
+The following were v1 non-goals and are now **in scope for v2**. See
+`docs/PLAN.md` for phase order, blast radius, and dependency sequencing.
+
+| v2 feature | PRD anchor | Notes |
+|------------|-----------|-------|
+| Multi-modal input (images, audio) | this §; §5.1 | Spec schema + all 4 adapter payloads. |
+| Auto-apply refinement | **FR-7** | `--auto-apply` re-runs eval to metric threshold or N iterations. |
+| Compile-result cache | **FR-14** | Hash-keyed `(spec_hash, backend, model, input_hash) → result`. |
+| Keychain / OAuth credential flows | **FR-10** | `KeychainProvider`, `OAuthProvider` alongside env-var + ADC. |
+| Spec composition / inheritance | §5.1 | Bumps `spec_version` 1→2 (clean break, see §8.4); flatten-before-walk. |
+| Streaming responses | FR-5 | All 4 adapters + runtime contract; `extract` becomes async-iterator. |
+
+### 8.3 Still out of scope (not in v2)
+
+- **Hosted SaaS UI** — product/hosting concern, not the compiler. Revisit as a
+  separate non-OSS track.
+
+### 8.4 spec_version bump (v2)
+
+v2 introduces `spec_version: 2` to carry composition/inheritance. **Clean break,
+no dual-path loader:** a `version: 1` spec errors out with a pointer to a
+one-shot `prompiler migrate-spec`; only one version is live at a time. Repo
+examples/fixtures migrate in the composition phase. No external consumers exist
+yet, so migration cost ≈ 0.
 
 ---
 
