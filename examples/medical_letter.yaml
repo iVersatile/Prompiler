@@ -1,0 +1,53 @@
+spec_version: 1
+name: medical_letter
+task: extract
+description: Extract structured referral details from a clinical referral letter. Operates on synthetic, non-identifying sample text only.
+max_input_tokens: 8000
+fields:
+  - name: patient_reference
+    type: string
+    required: true
+    description: Pseudonymous patient reference code used in the letter, not a real identity.
+    pattern: "^PT-[0-9]{4,}$"
+  - name: letter_date
+    type: date
+    required: true
+    description: Date the referral letter was written, in ISO 8601 form.
+  - name: referring_clinician
+    type: string
+    required: true
+    description: Name of the clinician who authored the referral.
+  - name: specialty
+    type: enum
+    required: true
+    description: Clinical specialty the patient is being referred to.
+    values:
+      - cardiology
+      - dermatology
+      - neurology
+      - orthopaedics
+      - general_medicine
+  - name: reason
+    type: string
+    required: true
+    description: Stated clinical reason for the referral.
+  - name: is_urgent
+    type: boolean
+    required: true
+    description: Whether the referral is flagged as urgent.
+  - name: medications
+    type: array
+    required: false
+    description: Current medications listed in the letter.
+    item:
+      type: object
+      description: A single medication entry.
+      fields:
+        - name: name
+          type: string
+          required: true
+          description: Name of the medication.
+        - name: dose
+          type: string
+          required: true
+          description: Prescribed dose and frequency.

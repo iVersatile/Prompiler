@@ -1,0 +1,84 @@
+{
+  "$defs": {
+    "MedicalLetterItem": {
+      "additionalProperties": false,
+      "properties": {
+        "dose": {
+          "title": "Dose",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "dose"
+      ],
+      "title": "MedicalLetterItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "is_urgent": {
+      "title": "Is Urgent",
+      "type": "boolean"
+    },
+    "letter_date": {
+      "format": "date",
+      "title": "Letter Date",
+      "type": "string"
+    },
+    "medications": {
+      "anyOf": [
+        {
+          "items": {
+            "$ref": "#/$defs/MedicalLetterItem"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Medications"
+    },
+    "patient_reference": {
+      "pattern": "^PT-[0-9]{4,}$",
+      "title": "Patient Reference",
+      "type": "string"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "referring_clinician": {
+      "title": "Referring Clinician",
+      "type": "string"
+    },
+    "specialty": {
+      "enum": [
+        "cardiology",
+        "dermatology",
+        "neurology",
+        "orthopaedics",
+        "general_medicine"
+      ],
+      "title": "Specialty",
+      "type": "string"
+    }
+  },
+  "required": [
+    "patient_reference",
+    "letter_date",
+    "referring_clinician",
+    "specialty",
+    "reason",
+    "is_urgent"
+  ],
+  "title": "MedicalLetter",
+  "type": "object"
+}

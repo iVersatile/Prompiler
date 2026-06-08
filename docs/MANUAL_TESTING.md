@@ -115,6 +115,11 @@ Each e2e test spawns a real `prompiler` subprocess and asserts CLI output
 and MCP tool-call round-trips. If a test hangs, kill it with `Ctrl-C` and
 inspect the spawned process tree with `ps -ef | grep prompiler`.
 
+The same tier pins golden artefacts (compiled prompt, JSON schema, `spec_hash`)
+for the scenario clients in `tests/test_e2e_clients.py` — the v2-change drift
+detector. See [V2 change validation](V2_VALIDATION.md) for how to read and
+regenerate those snapshots.
+
 ---
 
 ## 5. Cassette Record / Playback

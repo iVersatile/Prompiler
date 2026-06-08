@@ -1,0 +1,27 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "total_amount": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+          "type": "string"
+        }
+      ],
+      "title": "Total Amount"
+    },
+    "vendor_name": {
+      "title": "Vendor Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "vendor_name",
+    "total_amount"
+  ],
+  "title": "Invoice",
+  "type": "object"
+}
