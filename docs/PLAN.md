@@ -213,7 +213,7 @@ later phases; noted inline.
 - [x] `[gap G5]` MEDIUM — Spec disk mismatch: 6 spec types tested inline but only 2 example YAMLs on disk (`invoice`, `email_category`). Loader+hash+linter path under-exercised for the inline 6.
 - [x] `[gap G2]` LOW — No `e2e` pytest marker; the lone e2e folds into the `integration` tier. Can't select/run e2e in isolation.
 - [x] `[gap G6]` LOW — Integration spec tests cover happy/coerce/reject only; thin on partial/multi-field failures and real-ish retry-then-succeed bounce.
-- [ ] `[gap G7]` MEDIUM — `chunk_for_extract()` (PRD FR-13) unimplemented, not merely untested. PRD/architecture name it a v1-shipped utility and `runtime/__init__.py:4` docstring promises "the chunking helper", but no `def chunk*` exists anywhere in `src/` and no test references it. **Feature gap** — needs implementation + tests, not just a test. Severity MEDIUM: it is a standalone helper (no auto-chunk wiring required by FR-13), so nothing downstream is currently broken by its absence.
+- [x] `[gap G7]` MEDIUM — `chunk_for_extract()` (PRD FR-13) unimplemented, not merely untested. PRD/architecture name it a v1-shipped utility and `runtime/__init__.py:4` docstring promises "the chunking helper", but no `def chunk*` exists anywhere in `src/` and no test references it. **Feature gap** — needs implementation + tests, not just a test. Severity MEDIUM: it is a standalone helper (no auto-chunk wiring required by FR-13), so nothing downstream is currently broken by its absence. **Closed** — `src/prompiler/runtime/chunk.py` ships the char-window splitter (reuses `_CHARS_PER_TOKEN` to stay in lockstep with `_check_doc_size`); exported from `runtime/__init__.py`; 11 unit tests in `tests/test_runtime_chunk.py`.
 
 ---
 

@@ -27,6 +27,7 @@ introspect ``__all__``.
 
 from __future__ import annotations
 
+from prompiler.runtime.chunk import chunk_for_extract
 from prompiler.runtime.errors import (
     AdapterError,
     CompileError,
@@ -46,6 +47,7 @@ __all__ = [
     "MCPError",
     "PrompilerError",
     "SpecError",
+    "chunk_for_extract",
     "run",
     "run_batch",
     "run_sync",
