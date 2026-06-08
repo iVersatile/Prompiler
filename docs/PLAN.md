@@ -321,6 +321,8 @@ Phase-done (RULES §7): user approved 2026-06-08. PR #25 merged to main (`4a2ff3
 - Docs published.
 - Demo recording + tutorial walkthrough merged.
 
+Phase-done (RULES §7): user approved 2026-06-08. `v0.1.1` released to PyPI (sole release) and GitHub release `v0.1.1` published; demo recording + tutorial walkthrough merged via PR #31 (`80b6c4e`). All P8 tasks + acceptance + DoD met.
+
 ---
 
 ## 4. Cross-Cutting Tasks
