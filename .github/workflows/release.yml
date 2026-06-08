@@ -1,0 +1,308 @@
+# prompiler — Release
+#
+# Fires on an annotated `v*` tag pushed to `main` (docs/RULES.md §5 Version Tag
+# Gate). The gate itself — CI green, local test tier, changelog, semver bump,
+# explicit human approval — happens BEFORE the tag is pushed; by the time this
+# workflow runs the decision to ship is already made. Nothing here re-litigates
+# it, but every published artefact is verifiable after the fact:
+#
+#   - sdist + wheel        -> PyPI via OIDC trusted publisher (no API token)
+#   - multi-arch OCI image -> ghcr.io via buildx (linux/amd64,linux/arm64)
+#   - cosign signature     -> keyless (OIDC), verifiable against this workflow
+#   - CycloneDX SBOM        -> attached to the image and the GitHub release
+#   - GitHub release        -> changelog from the previous tag
+#
+# The version stamped into the wheel comes from pyproject.toml (single source of
+# truth); the tag must match it or `verify-tag` fails fast before anything ships.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing vX.Y.Z tag to (re)build a release for"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.11"
+  UV_VERSION: "0.4.30"
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Fail fast if the git tag and the packaged version disagree. A 0.1.0 wheel
+  # under a v0.2.0 tag is a release-integrity bug, not a warning.
+  # ---------------------------------------------------------------------------
+  verify-tag:
+    name: verify-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Resolve tag and packaged version
+        id: resolve
+        run: |
+          raw_tag="${{ inputs.tag || github.ref_name }}"
+          pkg_version="$(uv run python -c 'import prompiler; print(prompiler.__version__)')"
+          expected="v${pkg_version}"
+          echo "tag=${raw_tag}" >>"$GITHUB_OUTPUT"
+          echo "version=${pkg_version}" >>"$GITHUB_OUTPUT"
+          if [ "$raw_tag" != "$expected" ]; then
+            echo "::error::Tag '${raw_tag}' does not match packaged version '${expected}' (prompiler.__version__=${pkg_version})." >&2
+            exit 1
+          fi
+          echo "Tag '${raw_tag}' matches packaged version '${pkg_version}'."
+
+  # ---------------------------------------------------------------------------
+  # Build sdist + wheel once; downstream jobs consume the same artefact so the
+  # published wheel is byte-identical to the one PyPI receives.
+  # ---------------------------------------------------------------------------
+  build-dist:
+    name: build-dist
+    needs: verify-tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-tag.outputs.tag }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Install Python ${{ env.PYTHON_VERSION }}
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Build sdist + wheel
+        run: uv build --sdist --wheel --out-dir dist
+
+      - name: Check artefact metadata
+        run: uvx twine check dist/*
+
+      - name: Upload dist artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # PyPI via OIDC trusted publisher — no API token stored anywhere. The
+  # `pypi` environment gates this step and is where the trusted-publisher
+  # binding (PyPI project -> this repo/workflow/environment) is configured.
+  # ---------------------------------------------------------------------------
+  publish-pypi:
+    name: publish-pypi
+    needs: [verify-tag, build-dist]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi
+      url: https://pypi.org/project/prompiler/${{ needs.verify-tag.outputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download dist artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          print-hash: true
+
+  # ---------------------------------------------------------------------------
+  # Multi-arch OCI image -> ghcr.io, signed keyless with cosign, with a
+  # CycloneDX SBOM attached as an attestation. Build-args follow the Dockerfile
+  # contract (SOURCE_URL / VERSION / REVISION / LICENSES).
+  # ---------------------------------------------------------------------------
+  publish-image:
+    name: publish-image
+    needs: [verify-tag, build-dist]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-tag.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ needs.verify-tag.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.verify-tag.outputs.tag }}
+            type=raw,value=latest
+
+      - name: Build and push (multi-arch)
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            SOURCE_URL=${{ github.server_url }}/${{ github.repository }}
+            VERSION=${{ needs.verify-tag.outputs.version }}
+            REVISION=${{ github.sha }}
+            LICENSES=Apache-2.0
+          provenance: true
+          sbom: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image (keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: cosign sign --yes "${IMAGE_NAME}@${DIGEST}"
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: sbom.cyclonedx.json
+
+      - name: Attest SBOM to image (keyless)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign attest --yes \
+            --type cyclonedx \
+            --predicate sbom.cyclonedx.json \
+            "${IMAGE_NAME}@${DIGEST}"
+
+      - name: Upload SBOM artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cyclonedx.json
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # GitHub release with an auto-generated changelog (previous tag -> this tag)
+  # and the build artefacts attached. Runs last so a failed publish does not
+  # leave a release pointing at artefacts that never shipped.
+  # ---------------------------------------------------------------------------
+  github-release:
+    name: github-release
+    needs: [verify-tag, publish-pypi, publish-image]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-tag.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Download dist artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: Download SBOM artefact
+        uses: actions/download-artifact@v4
+        with:
+          name: sbom
+          path: sbom
+
+      - name: Generate changelog
+        id: changelog
+        env:
+          TAG: ${{ needs.verify-tag.outputs.tag }}
+        run: |
+          prev="$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || true)"
+          {
+            echo "## prompiler ${TAG}"
+            echo
+            if [ -n "$prev" ]; then
+              echo "Changes since ${prev}:"
+              echo
+              git log --no-merges --pretty='- %s (%h)' "${prev}..${TAG}"
+            else
+              echo "Initial release."
+              echo
+              git log --no-merges --pretty='- %s (%h)' "${TAG}"
+            fi
+            echo
+            echo "Container image: \`${IMAGE_NAME}:${TAG#v}\` (digest \`${{ needs.publish-image.outputs.digest }}\`)"
+          } >RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.verify-tag.outputs.tag }}
+          name: prompiler ${{ needs.verify-tag.outputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            dist/*
+            sbom/sbom.cyclonedx.json
+          fail_on_unmatched_files: true
