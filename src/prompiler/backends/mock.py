@@ -27,6 +27,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from prompiler.backends.base import ExtractResult
+
 
 class MockAdapter:
     """Returns ``{key: "mock"}`` for every key in ``json_schema['required']``.
@@ -41,9 +43,18 @@ class MockAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         required = json_schema.get("required", [])
-        return {key: "mock" for key in required}
+        return ExtractResult(
+            data={key: "mock" for key in required},
+            system_fingerprint=None,
+            deterministic=True,
+        )
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

@@ -26,7 +26,32 @@ tests cover behaviour.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
+
+
+@dataclass(frozen=True)
+class ExtractResult:
+    """Outcome of a single ``extract`` call plus determinism provenance.
+
+    ``data`` is the schema-conforming payload (what callers used to receive
+    directly as a dict). The extra fields surface run-time determinism so the
+    orchestrator can trace-tag results and warn when a backend cannot honour a
+    seed:
+
+      * ``system_fingerprint`` — OpenAI returns this to identify the backend
+        config that produced the output; other vendors leave it ``None``.
+      * ``deterministic`` — True when the call was made with a seed the backend
+        actually honours (FR-14 seed matrix); False for temperature-only
+        backends (Claude, Gemini) that cannot guarantee reproducibility.
+
+    Frozen so equality is structural — two identical extracts compare equal,
+    preserving the determinism contract test.
+    """
+
+    data: dict[str, Any]
+    system_fingerprint: str | None
+    deterministic: bool
 
 
 @runtime_checkable
@@ -34,8 +59,8 @@ class BackendAdapter(Protocol):
     """Vendor-agnostic JSON extraction contract.
 
     Implementations take a natural-language prompt plus a JSON Schema
-    describing the expected response shape and return a dict that conforms
-    to that schema's ``required`` keys at minimum.
+    describing the expected response shape and return an ``ExtractResult``
+    whose ``data`` conforms to that schema's ``required`` keys at minimum.
     """
 
     async def extract(
@@ -44,7 +69,18 @@ class BackendAdapter(Protocol):
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]: ...
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult: ...
+
+    def supports(self, feature: str) -> bool:
+        """Report whether this backend honours a determinism ``feature``.
+
+        The only feature queried today is ``"seed"``: Ollama and OpenAI honour
+        a request seed (reproducible given fixed inputs); Claude and Gemini are
+        temperature-only and return False. Unknown features return False.
+        """
+        ...
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         """Project ``json_schema`` into the dialect this backend accepts.

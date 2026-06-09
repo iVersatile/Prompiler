@@ -9,11 +9,28 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
+import prompiler.runtime.registry as registry_module
+from prompiler.backends.base import ExtractResult
 from prompiler.backends.observability import (
     ObservabilityHook,
     PricingTable,
     emit_call_metrics,
 )
+from prompiler.runtime.registry import Registry
+
+
+@pytest.fixture(autouse=True)
+def _isolated_default_registry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give every test a fresh module-level default registry.
+
+    The default registry is a process-global singleton; tests that register
+    into it without an explicit ``registry=`` kwarg (e.g. the e2e client tests)
+    would otherwise leak names across tests and trigger spurious duplicate-name
+    ``ValueError``s depending on collection order.
+    """
+    monkeypatch.setattr(registry_module, "_DEFAULT_REGISTRY", Registry())
 
 
 class ScriptedAdapter:
@@ -57,7 +74,9 @@ class ScriptedAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.calls += 1
         head = self._script.pop(0)
         if isinstance(head, Exception):
@@ -73,7 +92,10 @@ class ScriptedAdapter:
                 completion_tokens=completion_tokens,
                 pricing=self._pricing,
             )
-        return head
+        return ExtractResult(data=head, system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)

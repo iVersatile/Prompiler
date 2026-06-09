@@ -28,6 +28,7 @@ import pytest
 import yaml
 from pydantic import BaseModel
 
+from prompiler.backends.base import ExtractResult
 from prompiler.runtime.orchestrator import run
 from prompiler.runtime.registry import Registry, discover
 
@@ -99,10 +100,17 @@ class _SchemaDispatchScriptedAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.calls += 1
         key = frozenset(json_schema["properties"].keys())
-        return self._queues[key].pop(0)
+        return ExtractResult(
+            data=self._queues[key].pop(0), system_fingerprint=None, deterministic=True
+        )
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)

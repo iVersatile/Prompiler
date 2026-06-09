@@ -141,6 +141,7 @@ exclude_lines = [
     "raise NotImplementedError",
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
+    "^\\s*\\.\\.\\.$",
 ]
 show_missing = true
 skip_covered = false

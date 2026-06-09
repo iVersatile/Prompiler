@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
+from prompiler.backends.base import ExtractResult
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
     ObservabilityHook,
@@ -67,12 +68,18 @@ class OllamaAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
+        options: dict[str, Any] = {"temperature": temperature}
+        if seed is not None:
+            options["seed"] = seed
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": [{"role": "user", "content": prompt}],
             "format": json_schema,
             "stream": False,
+            "options": options,
         }
 
         body, latency = await post_with_retry(
@@ -108,7 +115,14 @@ class OllamaAdapter:
             completion_tokens=int(body.get("eval_count", 0)),
             pricing=self._pricing,
         )
-        return parsed
+        return ExtractResult(
+            data=parsed,
+            system_fingerprint=None,
+            deterministic=seed is not None,
+        )
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)
