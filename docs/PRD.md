@@ -74,7 +74,7 @@ These artefacts drift. Updating one without the others silently breaks productio
 - Containerised runtime image (multi-arch, non-root, healthcheck) published alongside PyPI release.
 - Containerised test pipeline (Ollama sidecar + uv test-runner, network-isolated for unit + integration tiers).
 
-**v1 non-goals (deferred to v2+):**
+**v1 non-goals (deferred to v2+):** — all but Hosted UI now **in scope for v2**; see §8.2.
 
 - Streaming extraction (batch only in v1).
 - Multi-modal input (text only in v1).

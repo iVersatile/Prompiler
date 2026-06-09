@@ -70,3 +70,17 @@ Neither trigger has fired as of this ADR:
 Re-open this ADR (supersede with ADR 0002) the moment either trigger fires:
 a third renderer lands, or a drift incident is logged as a numbered lesson in
 `docs/LESSONS_LEARNT.md`.
+
+## v2 watch (armed)
+
+This decision carries unchanged into v2 (`v0.2.0`). The two triggers above stay
+armed across all v2 phases — check them at each phase boundary:
+
+- **Q3 (spec composition):** stays **un-fired by design**. Composition uses
+  flatten-before-walk — the loader resolves inheritance into one flat
+  `EntitySpec` *before* `walk.py` sees it, so the walk keeps its existing
+  flat-spec contract and grows no new emitter (`docs/PLAN.md` §3 Q5).
+- A new trigger condition is added for v2: the watch **also** fires if any phase
+  makes the walk itself **inheritance-aware** (i.e. `walk.py` stops assuming a
+  flat spec), not only when a 3rd renderer lands.
+- Renderer count remains two (`model.py`, `codegen.py`) entering v2.
