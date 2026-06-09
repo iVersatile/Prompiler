@@ -190,12 +190,16 @@ For runtime determinism (against Ollama):
 docker compose -f docker-compose.test.yml up -d
 uv run prompiler extract examples/invoice.yaml --input examples/invoice_sample.txt -o /tmp/extract1.json
 uv run prompiler extract examples/invoice.yaml --input examples/invoice_sample.txt -o /tmp/extract2.json
-diff -q /tmp/extract1.json /tmp/extract2.json
+diff -q /tmp/extract1.json /tmp/extract2.json   # must exit 0
 ```
 
-With `temperature=0` and `seed=42` (the defaults), the two outputs should
-match. Divergence is a determinism regression — capture both files and open
-an issue.
+With `temperature=0` and `seed=42` (the defaults), the two Ollama outputs must
+be byte-identical — `diff -q` exits 0. Ollama honours `seed`, so the request
+carries it in the payload; the orchestrator resolves the value via the
+kwarg → `PROMPILER_SEED` env → `[tool.prompiler]` → hardcoded-`42` precedence.
+Any divergence is a determinism regression — capture both files and open an
+issue. For backends that ignore `seed` (Claude, Gemini), expect one
+`seed unsupported` WARN per process and verify only `temperature=0` stability.
 
 ---
 

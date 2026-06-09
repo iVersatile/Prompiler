@@ -26,6 +26,7 @@ from typing import Any, Final
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from prompiler.backends.base import ExtractResult
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.orchestrator import run
@@ -109,7 +110,9 @@ class _ScriptedAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.calls += 1
         assert self._script, (
             f"_ScriptedAdapter exhausted on call {self.calls}; "
@@ -118,7 +121,10 @@ class _ScriptedAdapter:
         head = self._script.pop(0)
         if isinstance(head, Exception):
             raise head
-        return head
+        return ExtractResult(data=head, system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)

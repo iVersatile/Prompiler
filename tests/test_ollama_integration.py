@@ -85,9 +85,9 @@ def test_ollama_extract_against_live_server() -> None:
 
     result = asyncio.run(_scenario())
 
-    assert isinstance(result, dict)
-    assert "label" in result
-    assert result["label"] in {"positive", "negative", "neutral"}
+    assert isinstance(result.data, dict)
+    assert "label" in result.data
+    assert result.data["label"] in {"positive", "negative", "neutral"}
 
     assert len(hook.calls) == 1
     metrics = hook.calls[0]

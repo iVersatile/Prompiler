@@ -25,6 +25,7 @@ from typing import Any, Final
 
 import pytest
 
+from prompiler.backends.base import ExtractResult
 from prompiler.compiler import compile_spec
 from prompiler.eval.fixtures import FixtureCase
 from prompiler.eval.runner import run_eval
@@ -150,11 +151,16 @@ class _PromptSensitiveAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.seen_prompts.append(prompt)
-        if _REFINED_MARKER in prompt:
-            return dict(_GOLD_INVOICE_PAYLOAD)
-        return dict(_DEGRADED_INVOICE_PAYLOAD)
+        refined = _REFINED_MARKER in prompt
+        payload = dict(_GOLD_INVOICE_PAYLOAD) if refined else dict(_DEGRADED_INVOICE_PAYLOAD)
+        return ExtractResult(data=payload, system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)
@@ -177,8 +183,13 @@ class _TutorAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
-        return dict(self._payload)
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
+        return ExtractResult(data=dict(self._payload), system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)
@@ -271,8 +282,13 @@ class _DecliningTutorAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
-        return dict(self._payload)
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
+        return ExtractResult(data=dict(self._payload), system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)
@@ -360,11 +376,16 @@ class _ContactAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.seen_prompts.append(prompt)
-        if _CONTACT_REFINED_MARKER in prompt.lower():
-            return dict(_CONTACT_GOLD)
-        return dict(_CONTACT_DEGRADED)
+        refined = _CONTACT_REFINED_MARKER in prompt.lower()
+        payload = dict(_CONTACT_GOLD) if refined else dict(_CONTACT_DEGRADED)
+        return ExtractResult(data=payload, system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)

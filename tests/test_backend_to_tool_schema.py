@@ -195,7 +195,7 @@ def test_gemini_extract_strips_hostile_keys_on_wire() -> None:
             await client.aclose()
 
     result = asyncio.run(run())
-    assert result == {"email": "a@b.c", "price": 1.0}
+    assert result.data == {"email": "a@b.c", "price": 1.0}
 
     body = captured["body"]
     parameters = body["tools"][0]["functionDeclarations"][0]["parameters"]

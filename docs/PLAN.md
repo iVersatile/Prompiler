@@ -325,6 +325,61 @@ Phase-done (RULES §7): user approved 2026-06-08. `v0.1.1` released to PyPI (sol
 
 ---
 
+### P9 — Determinism gap closure & anti-drift hardening (post-v1, pre-v2)
+
+Closes a documented-but-unimplemented gap found in the v1-vs-PRD adversarial review: run-time determinism (PRD §3/§5, FR-2, FR-14; architecture.md L166-179; MANUAL_TESTING.md L187-197) is specified but absent from `src/`. The `BackendAdapter` protocol never carried `temperature`/`seed`/`supports()` — P2 design-lock B narrowed `call(...)` down to `extract(*, prompt, json_schema, timeout)` and silently dropped them. P9.1 implements the missing surface; P9.2 installs the process gates that would have caught the drift. P9.1 runs **before** P9.2.
+
+#### P9.1 — Determinism fix (NEXT TASK)
+
+**Tasks**
+
+- Extend `BackendAdapter` protocol (`backends/base.py`): add `temperature: float = 0.0` and `seed: int | None = 42` to `extract`; add `supports(feature: str) -> bool`.
+- Change `extract` return type to `ExtractResult(data: dict, system_fingerprint: str | None, deterministic: bool)`; preserve the latency/fingerprint that `_pipeline.post_with_retry` already surfaces but `extract` currently discards.
+- Per-adapter seed matrix:
+  - **ollama:** thread `options.seed` + `options.temperature`; `supports("seed") -> True`.
+  - **openai:** thread `seed` + `temperature`; capture `system_fingerprint` from response; `supports("seed") -> True`.
+  - **claude:** thread `temperature` only; `supports("seed") -> False`.
+  - **gemini:** thread `temperature` only; `supports("seed") -> False`.
+- Orchestrator (`runtime/orchestrator.py`): unwrap `ExtractResult.data` at validation, trace-tag `deterministic`, emit one-shot WARN per non-seed backend per process.
+- Config wiring: plumb `[tool.prompiler]` temperature/seed defaults through `run` / `run_sync` / `run_batch`.
+
+**Acceptance criteria**
+
+- Shared adapter contract test asserts `temperature`/`seed` params present and `supports()` returns the matrix above.
+- Cassette proves `seed` lands in the wire payload for seed-capable adapters (ollama, openai).
+- Trace-tagging test confirms `deterministic` tag set per call.
+- `system_fingerprint` captured and surfaced for openai.
+- FR-2 and FR-14 each map to ≥1 passing test (entry added to the P9.2 traceability matrix).
+
+**Definition of done**
+
+- Coverage ≥ 85% on changed modules; `mypy --strict` clean; ruff clean.
+- MANUAL_TESTING Ollama recipe reproduces byte-identical output at `temperature=0`, `seed=42`.
+- `docs/LESSONS_LEARNT.md` entry recording the determinism-drift incident.
+
+#### P9.2 — Anti-drift hardening (AFTER P9.1)
+
+**Tasks**
+
+- Build an FR↔test traceability matrix; CI fails when any functional FR maps to zero tests.
+- Adapter contract test asserts required params by signature introspection (not just attribute presence).
+- `docs/RULES.md`: require any design-lock or contract-narrowing change to cite affected FRs in the PR description.
+- `docs/RULES.md`: forbid "defer to manual testing" for **functional** FRs (perf-timing deferral, per `test_perf_budgets.py` L10-13, stays allowed).
+- Extend the per-phase acceptance gate (`docs/RULES.md` §7) to require traceability-matrix green.
+
+**Acceptance criteria**
+
+- Matrix exists and is wired into CI; a deliberately untested FR fails the build in a dry run.
+- Contract test fails if an adapter omits a required `extract` parameter.
+- `docs/RULES.md` updated with both the FR-citation rule and the functional-FR no-defer rule.
+
+**Definition of done**
+
+- CI traceability gate green on a clean tree; documented in `docs/RULES.md` §7.
+- All v1 functional FRs present in the matrix with at least one passing test each.
+
+---
+
 ## 4. Cross-Cutting Tasks
 
 These run in every phase, not only in P8.

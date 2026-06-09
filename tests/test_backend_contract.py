@@ -7,11 +7,13 @@ Parameterized over adapter factories so every adapter (mock today; claude /
 openai / gemini / ollama in later P2.x tasks) runs the same assertions:
 
   1. Instance satisfies the ``BackendAdapter`` runtime-checkable Protocol.
-  2. ``await adapter.extract(...)`` returns a ``dict``.
-  3. Every key listed in ``json_schema['required']`` appears in the result.
-  4. Two successive calls with identical inputs return identical dicts
+  2. ``await adapter.extract(...)`` returns an ``ExtractResult``.
+  3. Every key listed in ``json_schema['required']`` appears in ``result.data``.
+  4. Two successive calls with identical inputs return identical results
      (determinism — needed so MockAdapter can stand in for golden tests and
      so cassette-replayed real adapters stay byte-stable).
+  5. ``extract`` accepts ``temperature`` and ``seed`` keyword args (FR-2).
+  6. ``adapter.supports("seed")`` reports the per-backend seed matrix (FR-14).
 
 Adapter factories are added to ``ADAPTER_FACTORIES`` as each real adapter
 lands; the contract assertions never change.
@@ -32,6 +34,7 @@ from _cassette_transport import make_cassette_transport
 from prompiler.backends import (
     BackendAdapter,
     ClaudeAdapter,
+    ExtractResult,
     GeminiAdapter,
     OllamaAdapter,
     OpenAIAdapter,
@@ -116,16 +119,47 @@ def test_adapter_satisfies_protocol(adapter: BackendAdapter) -> None:
 
 
 @pytest.mark.unit
-def test_extract_returns_dict(adapter: BackendAdapter) -> None:
+def test_extract_returns_extract_result(adapter: BackendAdapter) -> None:
     result = asyncio.run(adapter.extract(prompt=HAPPY_PATH_PROMPT, json_schema=HAPPY_PATH_SCHEMA))
-    assert isinstance(result, dict)
+    assert isinstance(result, ExtractResult)
+    assert isinstance(result.data, dict)
 
 
 @pytest.mark.unit
 def test_extract_contains_required_keys(adapter: BackendAdapter) -> None:
     result = asyncio.run(adapter.extract(prompt=HAPPY_PATH_PROMPT, json_schema=HAPPY_PATH_SCHEMA))
     for key in HAPPY_PATH_SCHEMA["required"]:
-        assert key in result, f"required key {key!r} missing from {result!r}"
+        assert key in result.data, f"required key {key!r} missing from {result.data!r}"
+
+
+@pytest.mark.unit
+def test_extract_accepts_temperature_and_seed(adapter: BackendAdapter) -> None:
+    result = asyncio.run(
+        adapter.extract(
+            prompt=HAPPY_PATH_PROMPT,
+            json_schema=HAPPY_PATH_SCHEMA,
+            temperature=0.0,
+            seed=42,
+        )
+    )
+    assert isinstance(result, ExtractResult)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("factory", "expected"),
+    [
+        (MockAdapter, True),
+        (_ollama_factory, True),
+        (_openai_factory, True),
+        (_claude_factory, False),
+        (_gemini_factory, False),
+    ],
+    ids=lambda v: getattr(v, "__name__", str(v)),
+)
+def test_supports_seed_matrix(factory: AdapterFactory, expected: bool) -> None:
+    adapter = factory()
+    assert adapter.supports("seed") is expected
 
 
 @pytest.mark.unit
@@ -142,7 +176,7 @@ def test_extract_concurrent_invocations() -> None:
     # safe under asyncio.gather without re-entrancy bugs.
     adapter = MockAdapter()
 
-    async def _run() -> list[dict[str, Any]]:
+    async def _run() -> list[ExtractResult]:
         return await asyncio.gather(
             *[
                 adapter.extract(prompt=HAPPY_PATH_PROMPT, json_schema=HAPPY_PATH_SCHEMA)
@@ -153,7 +187,7 @@ def test_extract_concurrent_invocations() -> None:
     results = asyncio.run(_run())
     assert len(results) == 5
     for result in results:
-        assert isinstance(result, dict)
+        assert isinstance(result, ExtractResult)
         for key in HAPPY_PATH_SCHEMA["required"]:
-            assert key in result
+            assert key in result.data
     assert all(r == results[0] for r in results)

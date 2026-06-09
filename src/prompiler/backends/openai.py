@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
+from prompiler.backends.base import ExtractResult
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -82,10 +83,13 @@ class OpenAIAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         payload: dict[str, Any] = {
             "model": self._model,
             "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
             "tools": [
                 {
                     "type": "function",
@@ -101,6 +105,8 @@ class OpenAIAdapter:
                 "function": {"name": EXTRACT_TOOL_NAME},
             },
         }
+        if seed is not None:
+            payload["seed"] = seed
 
         body, latency = await post_with_retry(
             client=self._client,
@@ -136,11 +142,19 @@ class OpenAIAdapter:
                         completion_tokens=int(usage.get("completion_tokens", 0)),
                         pricing=self._pricing,
                     )
-                    return parsed
+                    fingerprint = body.get("system_fingerprint")
+                    return ExtractResult(
+                        data=parsed,
+                        system_fingerprint=(fingerprint if isinstance(fingerprint, str) else None),
+                        deterministic=seed is not None,
+                    )
         raise RuntimeError(
             f"OpenAI response missing tool_calls entry for {EXTRACT_TOOL_NAME!r}: "
             f"{truncate_for_error(body)}"
         )
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)
