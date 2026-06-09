@@ -1,13 +1,13 @@
 # prompiler — Delivery Plan (v2)
 
-**Status:** v2 plan — DRAFT, under discussion (NOT locked)
-**Date:** 2026-06-08
-**Source of truth:** `PRD.md` (v2 scope additions pending PRD update)
+**Status:** v2 plan locked
+**Date:** 2026-06-09
+**Source of truth:** `PRD.md` §8.2 (v2 accepted set)
 **Predecessor:** v1 delivered (`v0.1.1`, all phases P0–P8 closed). Full v1 plan archived in `PLAN.BK.MD`.
 
-> This document is a working draft. Sections marked **[DISCUSS]** are open
-> questions to settle with the maintainer before the plan locks. Nothing here
-> is committed scope until the status line reads "v2 plan locked".
+> Plan locked as of 2026-06-09. §1 scope and §2 phase order are committed.
+> Open questions in §3 are all RESOLVED. Per-phase task checkboxes are added at
+> each phase boundary (§6 Phase Start Gate); Q1 is expanded below.
 
 ---
 
@@ -96,6 +96,66 @@ designed so work can fan out to >1 engineer. Independent-blast-radius pairs
 (e.g. Q1 cache vs Q2 keychain) parallelize cleanly; LARGE items (multi-modal,
 composition, streaming) stay owned by one engineer each to avoid merge churn.
 **No target dates** — phases are a logical/dependency order, not a calendar.
+
+---
+
+## 2.1 Q1 — Multi-modal input + Compile-result cache (expanded)
+
+**Phase tag base for §6 gate:** `v0.1.1`. **Blast radius:** LARGE (multi-modal)
++ SMALL (cache). Multi-modal is single-owner; cache is independent and can fan
+out. PRD anchors: §8.2 (multi-modal, cache), FR-14 (cache key).
+
+**Scope correction (from codebase grounding):** `compile_spec(spec)` takes the
+spec *only* — its artefacts are a pure function of the spec, so the compile-side
+cache keys on **`spec_hash` alone**. The full FR-14 tuple
+`(spec_hash, backend, model, input_hash)` keys the **runtime `extract` result**
+(the model call), not `compile`. The two caches are separate layers; Q1 ships
+both but does not conflate their keys.
+
+### Track A — Multi-modal input (LARGE, single-owner)
+
+- [ ] **A1. Spec schema: add modal field types.** Extend `FieldType` /
+  `EntitySpec` in `src/prompiler/spec/model.py` to accept image/audio input
+  declarations, with `extra="forbid"` invariants and a `model_validator` clause.
+  *Exit:* new validator unit tests pass (valid modal spec loads; malformed modal
+  field raises `ValueError`); existing spec tests stay green.
+- [ ] **A2. spec_hash covers modal fields.** Confirm `spec_hash` digest changes
+  when a modal field is added/removed (canonical-YAML folds the new keys).
+  *Exit:* round-trip test asserts hash inequality across modal-vs-text spec.
+- [ ] **A3. COMPILER_PROTOCOL_VERSION decision.** Modal fields change per-adapter
+  projection schema → bump `COMPILER_PROTOCOL_VERSION` in
+  `src/prompiler/__init__.py` (RULES.md §10). *Exit:* version-bump rationale
+  recorded in commit body; protocol-version test updated.
+- [ ] **A4. Adapter payloads — 4 backends.** Thread modal content through
+  `BackendAdapter.call` payload construction for claude/openai/gemini/ollama
+  (`src/prompiler/backends/*.py`); gate via `supports("multimodal")`. *Exit:*
+  per-adapter payload tests assert correct modal block shape; unsupported
+  backend raises a clear capability error, not a silent drop.
+- [ ] **A5. Orchestrator + MCP surface.** Plumb modal input through
+  `runtime/orchestrator.py` and the MCP `extract` tool. *Exit:* integration test
+  runs a modal extract end-to-end against the mock adapter.
+
+### Track B — Compile-result cache (SMALL, independent)
+
+- [ ] **B1. Compile-side memoization.** Memoize `compile_spec` keyed on
+  `spec_hash`. *Exit:* second `compile_spec` on a field-equal spec returns a
+  cache hit (observable via hook/metric); artefacts stay field-equal
+  (determinism contract preserved).
+- [ ] **B2. Runtime result cache (FR-14).** Cache `extract` results keyed on
+  `(spec_hash, backend, model, input_hash)`. *Exit:* repeated identical extract
+  is served from cache (no adapter `call`); any tuple-element change misses.
+- [ ] **B3. Cache invalidation + opt-out.** Cache respects `spec_hash` /
+  protocol-version changes automatically; expose a disable switch. *Exit:* test
+  shows a protocol-version bump invalidates stale entries; disable flag forces
+  recompute.
+
+### Q1 exit criteria (phase-done, feeds §7 gate)
+
+- [ ] All A* and B* boxes checked; full suite green; coverage ≥ 80%.
+- [ ] mypy strict clean across touched modules.
+- [ ] `COMPILER_PROTOCOL_VERSION` bump (A3) reflected in any golden fixtures.
+- [ ] No prompt/response payloads logged below `trace` (RULES.md §8) — modal
+  bytes are payloads, audit the new adapter code for leakage.
 
 ---
 
