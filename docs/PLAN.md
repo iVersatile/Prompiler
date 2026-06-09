@@ -17,7 +17,7 @@ These must be resolved or explicitly re-deferred **before** v2 phase work begins
 
 | ID | Item | State entering v2 | Proposed v2 action |
 |----|------|-------------------|--------------------|
-| **#8** | **RECOVERED:** "LL-NNN entry for CI exemption fix" — write a Lessons Learnt entry capturing *why* the branch-guard needed a CI no-op | Open. The fix shipped (`check_branch_guard.py` no-ops when `CI=true`/`GITHUB_ACTIONS=true`, PR #17 `a85df0a`→`5aa0f55`; spec in RULES.md §1.0 via PR #18). LL-005 covers the *separate* truthy-escape-hatch bug, **not** the CI exemption — so no LL entry exists for #8 yet. | **RESOLVED: write LL-008** (CI-exemption lesson) in Q0. Captures the rationale before it's lost; fix is already shipped + spec'd. |
+| **#8** | **RECOVERED:** "LL-NNN entry for CI exemption fix" — write a Lessons Learnt entry capturing *why* the branch-guard needed a CI no-op | Open. The fix shipped (`check_branch_guard.py` no-ops when `CI=true`/`GITHUB_ACTIONS=true`, PR #17 `a85df0a`→`5aa0f55`; spec in RULES.md §1.0 via PR #18). LL-005 covers the *separate* truthy-escape-hatch bug, **not** the CI exemption. | **DONE: LL-009 written** (CI-exemption lesson; LL-008 was already taken by the determinism entry). Captures the rationale; fix already shipped + spec'd. |
 | **codegen IR** | Deepen shared `walk.py` visitor → FieldSpec IR module | Deferred; no trigger fired | Becomes **live** if a v2 phase adds a 3rd renderer (e.g. TypeScript / JSON-Schema-dialect emitter). Decide at that phase boundary. |
 
 Closed in v1, no carry-over: #3 (MCP extract test — landed via P6/G4), #4, #5, #6, #7.
@@ -66,7 +66,7 @@ phase ships a headline capability plus a low-risk win. Risk rises across phases.
 
 ```
 Q0  Prerequisites clearance
-      - #8 decision: write LL-008 (CI-exemption lesson) or formally drop
+      - #8 decision: DONE — LL-009 written (CI-exemption lesson; LL-008 was the determinism entry)
       - PRD §8 candidates promoted into §6 (in-scope) — PRD update
       - codegen-IR trigger watch armed (fires if any phase adds a 3rd renderer)
 
@@ -103,7 +103,7 @@ composition, streaming) stay owned by one engineer each to avoid merge churn.
 
 1. ~~v2 theme: depth vs breadth?~~ **RESOLVED: Mixed** (§1).
 2. ~~#8 — recover or drop?~~ **RESOLVED** (§0): recovered as "LL-NNN for
-   CI-exemption fix"; **write LL-008 in Q0**.
+   CI-exemption fix"; **DONE — written as LL-009** (LL-008 was the determinism entry).
 3. ~~Backwards-compat contract?~~ **RESOLVED: bump to `spec_version: 2`** — no
    external consumers yet, migration cost ≈ 0. **Clean break, no dual-path
    loader:** `version: 1` errors out with a pointer to a one-shot `prompiler
