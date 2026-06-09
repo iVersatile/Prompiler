@@ -41,12 +41,16 @@ in submission order.
 from __future__ import annotations
 
 import asyncio
+import os
+import tomllib
 from collections.abc import Sequence
-from typing import Final
+from pathlib import Path
+from typing import Any, Final
 
 from pydantic import BaseModel, ValidationError
 
-from prompiler.backends.base import BackendAdapter
+from prompiler import obs
+from prompiler.backends.base import BackendAdapter, ExtractResult
 from prompiler.runtime.errors import ExtractionFailed
 from prompiler.runtime.registry import Registry, _resolve
 
@@ -59,6 +63,87 @@ _CORRECTIVE_FEEDBACK_HEADER: Final[str] = (
 )
 _CHARS_PER_TOKEN: Final[int] = 4
 _DEFAULT_BATCH_CONCURRENCY: Final[int] = 8
+
+# Determinism config (FR-2, FR-14). Precedence mirrors registry._resolve_prompts_dir:
+# kwarg -> env var -> pyproject.toml [tool.prompiler] -> hardcoded default.
+_TEMPERATURE_ENV: Final[str] = "PROMPILER_TEMPERATURE"
+_SEED_ENV: Final[str] = "PROMPILER_SEED"
+_DEFAULT_TEMPERATURE: Final[float] = 0.0
+_DEFAULT_SEED: Final[int] = 42
+
+_logger = obs.get_logger("prompiler.orchestrator")
+
+
+class _Unset:
+    """Sentinel distinguishing "kwarg not provided" from an explicit ``seed=None``."""
+
+
+_UNSET: Final[_Unset] = _Unset()
+
+# Process-lifetime set of backend class names already warned for non-determinism.
+# One WARN per non-seed backend per process (FR-14) — not per call.
+_warned_backends: set[str] = set()
+
+
+def _read_prompiler_block() -> dict[str, Any]:
+    """Return ``[tool.prompiler]`` from cwd ``pyproject.toml``; ``{}`` if absent."""
+    path = Path.cwd() / "pyproject.toml"
+    try:
+        with path.open("rb") as fh:
+            data = tomllib.load(fh)
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    block = data.get("tool", {}).get("prompiler", {})
+    return block if isinstance(block, dict) else {}
+
+
+def _resolve_temperature(temperature: float | _Unset, block: dict[str, Any]) -> float:
+    if not isinstance(temperature, _Unset):
+        return temperature
+    env = os.environ.get(_TEMPERATURE_ENV)
+    if env is not None:
+        return float(env)
+    if "temperature" in block:
+        return float(block["temperature"])
+    return _DEFAULT_TEMPERATURE
+
+
+def _resolve_seed(seed: int | None | _Unset, block: dict[str, Any]) -> int | None:
+    if not isinstance(seed, _Unset):
+        return seed
+    env = os.environ.get(_SEED_ENV)
+    if env is not None:
+        return None if env.strip().lower() in ("", "none", "null") else int(env)
+    if "seed" in block:
+        raw = block["seed"]
+        return None if raw is None else int(raw)
+    return _DEFAULT_SEED
+
+
+def _warn_if_nondeterministic(backend: BackendAdapter) -> None:
+    """Emit one WARN per non-seed backend per process (FR-14)."""
+    if backend.supports("seed"):
+        return
+    key = type(backend).__name__
+    if key in _warned_backends:
+        return
+    _warned_backends.add(key)
+    _logger.warning(
+        "backend does not support seed; runs are not byte-reproducible",
+        extra={"event": "nondeterministic_backend", "backend": key},
+    )
+
+
+def _trace_deterministic(result: ExtractResult) -> None:
+    _logger.log(
+        obs.TRACE,
+        "extraction deterministic flag",
+        extra={
+            "event": "deterministic",
+            "deterministic": result.deterministic,
+            "system_fingerprint": result.system_fingerprint,
+        },
+    )
 
 
 def _assemble_prompt(base_prompt: str, text: str) -> str:
@@ -87,21 +172,42 @@ async def run(
     backend: BackendAdapter,
     registry: Registry | None = None,
     timeout: float | None = None,
+    temperature: float | _Unset = _UNSET,
+    seed: int | None | _Unset = _UNSET,
 ) -> BaseModel:
     """Run extraction for a single document. See module docstring."""
     bundle = _resolve(registry).get(name)
     _check_doc_size(text, bundle.max_input_tokens)
 
+    block = _read_prompiler_block()
+    resolved_temperature = _resolve_temperature(temperature, block)
+    resolved_seed = _resolve_seed(seed, block)
+    _warn_if_nondeterministic(backend)
+
     json_schema = bundle.pydantic_cls.model_json_schema()
     prompt = _assemble_prompt(bundle.prompt, text)
-    raw = await backend.extract(prompt=prompt, json_schema=json_schema, timeout=timeout)
+    result = await backend.extract(
+        prompt=prompt,
+        json_schema=json_schema,
+        timeout=timeout,
+        temperature=resolved_temperature,
+        seed=resolved_seed,
+    )
+    _trace_deterministic(result)
     try:
-        return bundle.pydantic_cls.model_validate(raw)
+        return bundle.pydantic_cls.model_validate(result.data)
     except ValidationError as first_err:
         retry_prompt = _corrective_prompt(prompt, first_err)
-        raw = await backend.extract(prompt=retry_prompt, json_schema=json_schema, timeout=timeout)
+        result = await backend.extract(
+            prompt=retry_prompt,
+            json_schema=json_schema,
+            timeout=timeout,
+            temperature=resolved_temperature,
+            seed=resolved_seed,
+        )
+        _trace_deterministic(result)
         try:
-            return bundle.pydantic_cls.model_validate(raw)
+            return bundle.pydantic_cls.model_validate(result.data)
         except ValidationError as second_err:
             raise ExtractionFailed(
                 f"validation failed after retry for spec {name!r}"
@@ -115,9 +221,21 @@ def run_sync(
     backend: BackendAdapter,
     registry: Registry | None = None,
     timeout: float | None = None,
+    temperature: float | _Unset = _UNSET,
+    seed: int | None | _Unset = _UNSET,
 ) -> BaseModel:
     """Sync wrapper over :func:`run` via :func:`asyncio.run`."""
-    return asyncio.run(run(name, text, backend=backend, registry=registry, timeout=timeout))
+    return asyncio.run(
+        run(
+            name,
+            text,
+            backend=backend,
+            registry=registry,
+            timeout=timeout,
+            temperature=temperature,
+            seed=seed,
+        )
+    )
 
 
 async def run_batch(
@@ -128,6 +246,8 @@ async def run_batch(
     registry: Registry | None = None,
     concurrency: int = _DEFAULT_BATCH_CONCURRENCY,
     timeout: float | None = None,
+    temperature: float | _Unset = _UNSET,
+    seed: int | None | _Unset = _UNSET,
 ) -> list[BaseModel | Exception]:
     """Run extraction over many documents with per-item isolation.
 
@@ -146,6 +266,8 @@ async def run_batch(
                     backend=backend,
                     registry=registry,
                     timeout=timeout,
+                    temperature=temperature,
+                    seed=seed,
                 )
             except Exception as err:
                 return err

@@ -26,6 +26,7 @@ from typing import Any
 import pytest
 from pydantic import BaseModel, ValidationError
 
+from prompiler.backends.base import ExtractResult
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.errors import AdapterError
@@ -74,13 +75,18 @@ class _ScriptedAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.calls += 1
         self.prompts.append(prompt)
         head = self._script.pop(0)
         if isinstance(head, Exception):
             raise head
-        return head
+        return ExtractResult(data=head, system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)
@@ -102,7 +108,9 @@ class _CountingAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         async with self._lock:
             self._in_flight += 1
             if self._in_flight > self.peak:
@@ -110,10 +118,13 @@ class _CountingAdapter:
             self.calls += 1
         try:
             await asyncio.sleep(self._delay)
-            return {"title": "ok"}
+            return ExtractResult(data={"title": "ok"}, system_fingerprint=None, deterministic=True)
         finally:
             async with self._lock:
                 self._in_flight -= 1
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)

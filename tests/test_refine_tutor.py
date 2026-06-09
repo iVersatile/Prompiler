@@ -18,6 +18,7 @@ from typing import Any
 
 import pytest
 
+from prompiler.backends.base import ExtractResult
 from prompiler.refine.tutor import (
     TUTOR_RESPONSE_SCHEMA,
     build_tutor_user_prompt,
@@ -70,13 +71,18 @@ class RecordingAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.prompt = prompt
         self.json_schema = json_schema
         self.timeout = timeout
         if isinstance(self._response, Exception):
             raise self._response
-        return self._response
+        return ExtractResult(data=self._response, system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)

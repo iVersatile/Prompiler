@@ -21,6 +21,7 @@ from typing import Any, cast
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
+from prompiler.backends.base import ExtractResult
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -125,9 +126,12 @@ class GeminiAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         payload: dict[str, Any] = {
             "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": temperature},
             "tools": [
                 {
                     "functionDeclarations": [
@@ -174,11 +178,18 @@ class GeminiAdapter:
                         completion_tokens=int(usage.get("candidatesTokenCount", 0)),
                         pricing=self._pricing,
                     )
-                    return args
+                    return ExtractResult(
+                        data=args,
+                        system_fingerprint=None,
+                        deterministic=False,
+                    )
         raise RuntimeError(
             f"Gemini response missing functionCall for {EXTRACT_TOOL_NAME!r}: "
             f"{truncate_for_error(body)}"
         )
+
+    def supports(self, feature: str) -> bool:
+        return False
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return cast("dict[str, Any]", _project_gemini(json_schema, depth=1))

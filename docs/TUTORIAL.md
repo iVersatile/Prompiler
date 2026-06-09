@@ -109,4 +109,5 @@ retry on a validation error before raising `ExtractionFailed`.
 - [API reference](API.md) — full Python surface (`compile`, `run`, `run_batch`, spec helpers).
 - [CLI reference](CLI.md) — every command and flag.
 - [Architecture](architecture.md) — how the layers fit together.
+- [V2 change validation](V2_VALIDATION.md) — golden snapshots that catch drift in compiled output.
 - [`examples/`](../examples/) — five worked specs covering arrays, enums, nested objects, patterns.

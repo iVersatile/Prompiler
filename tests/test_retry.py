@@ -203,7 +203,7 @@ def test_claude_adapter_retries_429_then_succeeds(
         )
     )
 
-    assert result == {"label": "billing", "reason": "invoice mention"}
+    assert result.data == {"label": "billing", "reason": "invoice mention"}
     assert calls["n"] == 3
     assert captured == [0.5, 1.0]
 

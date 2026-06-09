@@ -20,6 +20,7 @@ from typing import Any
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
+from prompiler.backends.base import ExtractResult
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -85,10 +86,13 @@ class ClaudeAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         payload: dict[str, Any] = {
             "model": self._model,
             "max_tokens": self._max_tokens,
+            "temperature": temperature,
             "messages": [{"role": "user", "content": prompt}],
             "tools": [
                 {
@@ -122,11 +126,18 @@ class ClaudeAdapter:
                         completion_tokens=int(usage.get("output_tokens", 0)),
                         pricing=self._pricing,
                     )
-                    return tool_input
+                    return ExtractResult(
+                        data=tool_input,
+                        system_fingerprint=None,
+                        deterministic=False,
+                    )
         raise RuntimeError(
             f"Claude response missing tool_use block for {EXTRACT_TOOL_NAME!r}: "
             f"{truncate_for_error(body)}"
         )
+
+    def supports(self, feature: str) -> bool:
+        return False
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

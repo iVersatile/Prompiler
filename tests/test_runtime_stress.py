@@ -24,6 +24,7 @@ from typing import Any, Final
 import pytest
 from pydantic import BaseModel
 
+from prompiler.backends.base import ExtractResult
 from prompiler.compiler import compile_spec
 from prompiler.runtime.orchestrator import run_batch
 from prompiler.runtime.registry import Registry
@@ -72,9 +73,16 @@ class _FastAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.calls += 1
-        return {"title": self._payload}
+        return ExtractResult(
+            data={"title": self._payload}, system_fingerprint=None, deterministic=True
+        )
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)

@@ -32,6 +32,7 @@ from typing import Any, Final
 import pytest
 from pydantic import ValidationError
 
+from prompiler.backends.base import ExtractResult
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.errors import AdapterError
@@ -73,7 +74,9 @@ class _ScriptedAdapter:
         prompt: str,
         json_schema: dict[str, Any],
         timeout: float | None = None,
-    ) -> dict[str, Any]:
+        temperature: float = 0.0,
+        seed: int | None = 42,
+    ) -> ExtractResult:
         self.calls += 1
         assert self._script, (
             f"_ScriptedAdapter exhausted on call {self.calls}; "
@@ -82,7 +85,10 @@ class _ScriptedAdapter:
         head = self._script.pop(0)
         if isinstance(head, (AdapterError, asyncio.TimeoutError)):
             raise head
-        return head
+        return ExtractResult(data=head, system_fingerprint=None, deterministic=True)
+
+    def supports(self, feature: str) -> bool:
+        return feature == "seed"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return dict(json_schema)
@@ -153,10 +159,19 @@ def test_timeout_propagates_without_orchestrator_retry() -> None:
             prompt: str,
             json_schema: dict[str, Any],
             timeout: float | None = None,
-        ) -> dict[str, Any]:
+            temperature: float = 0.0,
+            seed: int | None = 42,
+        ) -> ExtractResult:
             self.calls += 1
             await asyncio.sleep(10)
-            return {"title": "never", "count": 0}
+            return ExtractResult(
+                data={"title": "never", "count": 0},
+                system_fingerprint=None,
+                deterministic=True,
+            )
+
+        def supports(self, feature: str) -> bool:
+            return feature == "seed"
 
         def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
             return dict(json_schema)

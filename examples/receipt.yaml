@@ -1,0 +1,51 @@
+spec_version: 1
+name: receipt
+task: extract
+description: Extract structured purchase details from a point-of-sale receipt.
+max_input_tokens: 6000
+fields:
+  - name: merchant
+    type: string
+    required: true
+    description: Name of the merchant or store printed on the receipt.
+  - name: purchased_at
+    type: datetime
+    required: true
+    description: Date and time of purchase, in ISO 8601 form.
+  - name: line_items
+    type: array
+    required: true
+    description: One entry per purchased item.
+    item:
+      type: object
+      description: A single purchased line item.
+      fields:
+        - name: description
+          type: string
+          required: true
+          description: Human-readable name of the purchased item.
+        - name: quantity
+          type: integer
+          required: true
+          description: Units purchased for this line.
+          minimum: 1
+        - name: amount
+          type: decimal
+          required: true
+          description: Line total for this item in the receipt currency.
+  - name: subtotal
+    type: decimal
+    required: true
+    description: Sum of all line items before tax and tip.
+  - name: tax
+    type: decimal
+    required: true
+    description: Total tax charged on the purchase.
+  - name: tip
+    type: decimal
+    required: false
+    description: Gratuity added to the purchase, if any.
+  - name: total
+    type: decimal
+    required: true
+    description: Grand total paid, including tax and tip.

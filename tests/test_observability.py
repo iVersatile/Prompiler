@@ -244,7 +244,7 @@ def test_claude_adapter_emits_metrics_on_success() -> None:
     result = asyncio.run(adapter.extract(prompt="hi", json_schema=JSON_SCHEMA))
     asyncio.run(adapter.aclose())
 
-    assert result == {"label": "billing"}
+    assert result.data == {"label": "billing"}
     assert len(hook.calls) == 1
     m = hook.calls[0]
     assert m.backend == "claude"
@@ -277,7 +277,7 @@ def test_openai_adapter_emits_metrics_on_success() -> None:
     result = asyncio.run(adapter.extract(prompt="hi", json_schema=JSON_SCHEMA))
     asyncio.run(adapter.aclose())
 
-    assert result == {"label": "billing"}
+    assert result.data == {"label": "billing"}
     assert len(hook.calls) == 1
     m = hook.calls[0]
     assert m.backend == "openai"
@@ -308,7 +308,7 @@ def test_gemini_adapter_emits_metrics_on_success() -> None:
     result = asyncio.run(adapter.extract(prompt="hi", json_schema=JSON_SCHEMA))
     asyncio.run(adapter.aclose())
 
-    assert result == {"label": "billing"}
+    assert result.data == {"label": "billing"}
     assert len(hook.calls) == 1
     m = hook.calls[0]
     assert m.backend == "gemini"
@@ -338,7 +338,7 @@ def test_ollama_adapter_emits_metrics_on_success() -> None:
     result = asyncio.run(adapter.extract(prompt="hi", json_schema=JSON_SCHEMA))
     asyncio.run(adapter.aclose())
 
-    assert result == {"label": "billing"}
+    assert result.data == {"label": "billing"}
     assert len(hook.calls) == 1
     m = hook.calls[0]
     assert m.backend == "ollama"
@@ -362,7 +362,7 @@ def test_adapter_does_not_crash_without_observability() -> None:
     adapter = OpenAIAdapter(client=client)  # no observability kwarg
     result = asyncio.run(adapter.extract(prompt="hi", json_schema=JSON_SCHEMA))
     asyncio.run(adapter.aclose())
-    assert result == {"label": "billing"}
+    assert result.data == {"label": "billing"}
 
 
 @pytest.mark.unit

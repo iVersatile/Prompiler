@@ -181,8 +181,17 @@ Before marking a phase complete in `docs/PLAN.md`:
 
 1. Every task checkbox in the phase is checked.
 2. Every exit criterion documented in `docs/PLAN.md` for that phase is met. Quote the criterion and the evidence inline in the report.
-3. Remote CI is green on `main`.
-4. **Ask the user for explicit approval.** Do not self-approve phase completion under any circumstance.
+3. The FR↔test traceability matrix is green (`tests/test_fr_traceability.py`). Every functional FR (PRD §6, FR-1..FR-14) maps to at least one passing test. This runs under the required `unit` CI check, so step 4 already covers it — but verify it explicitly in the report.
+4. Remote CI is green on `main`.
+5. **Ask the user for explicit approval.** Do not self-approve phase completion under any circumstance.
+
+### 7.1 FR Traceability & Anti-Drift
+
+Two standing rules keep the functional surface from silently losing test coverage as the design tightens:
+
+1. **FR-citation on contract narrowing.** Any change that locks a design decision or narrows a contract — adapter `extract` signatures, the `BackendAdapter` Protocol, spec/schema shapes, the per-adapter projection, or any acceptance criterion — **must cite the affected FRs (PRD §6) in the PR description**. This makes the blast radius of a narrowing reviewable and keeps the traceability matrix honest.
+
+2. **No "defer to manual testing" for functional FRs.** Functional FRs (FR-1..FR-14) must be covered by automated tests; "verify by hand" is not an acceptable substitute for any functional FR. **Sole sanctioned carve-out:** perf-timing assertions may defer to manual measurement (see `tests/test_perf_budgets.py` L10-13). FR-15 (Container Distribution) is a documented non-functional deferral with no pytest surface and is excluded from the functional matrix.
 
 ---
 

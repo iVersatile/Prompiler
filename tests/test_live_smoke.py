@@ -49,9 +49,9 @@ OLLAMA_READINESS_TIMEOUT_SECONDS = 2.0
 
 
 def _assert_sentiment_result(result: Any) -> None:
-    assert isinstance(result, dict)
-    assert "label" in result
-    assert result["label"] in {"positive", "negative", "neutral"}
+    assert isinstance(result.data, dict)
+    assert "label" in result.data
+    assert result.data["label"] in {"positive", "negative", "neutral"}
 
 
 def _require_env(var: str) -> str:
