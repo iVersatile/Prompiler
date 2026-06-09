@@ -22,6 +22,7 @@ lands; the contract assertions never change.
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,24 @@ def test_extract_accepts_temperature_and_seed(adapter: BackendAdapter) -> None:
         )
     )
     assert isinstance(result, ExtractResult)
+
+
+@pytest.mark.unit
+def test_extract_requires_prompt_and_json_schema_by_signature(adapter: BackendAdapter) -> None:
+    """Required ``extract`` params are enforced by signature, not call success.
+
+    Source of truth: docs/PLAN.md §P9.2 — "Adapter contract test asserts
+    required params by signature introspection (not just attribute presence)."
+    Acceptance: "Contract test fails if an adapter omits a required ``extract``
+    parameter." A ``**kwargs``-only signature (which would pass the call-based
+    tests above) fails here because the named params would be absent.
+    """
+    params = inspect.signature(adapter.extract).parameters
+    for name in ("prompt", "json_schema"):
+        assert name in params, f"{type(adapter).__name__}.extract omits required parameter {name!r}"
+        assert params[name].default is inspect.Parameter.empty, (
+            f"{type(adapter).__name__}.extract parameter {name!r} must be required (no default)"
+        )
 
 
 @pytest.mark.unit
