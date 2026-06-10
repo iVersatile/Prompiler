@@ -137,7 +137,7 @@ both but does not conflate their keys.
 
 ### Track B — Compile-result cache (SMALL, independent)
 
-- [ ] **B1. Compile-side memoization.** _(in progress)_ Memoize `compile_spec` keyed on
+- [x] **B1. Compile-side memoization.** Memoize `compile_spec` keyed on
   `spec_hash`. *Exit:* second `compile_spec` on a field-equal spec returns a
   cache hit (observable via hook/metric); artefacts stay field-equal
   (determinism contract preserved).
