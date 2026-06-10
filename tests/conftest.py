@@ -19,7 +19,14 @@ from prompiler.backends.observability import (
     PricingTable,
     emit_call_metrics,
 )
+from prompiler.runtime.orchestrator import result_cache_clear
 from prompiler.runtime.registry import Registry
+
+
+@pytest.fixture(autouse=True)
+def _clear_result_cache() -> None:
+    """Reset the global runtime result cache before each test (isolation)."""
+    result_cache_clear()
 
 
 @pytest.fixture(autouse=True)

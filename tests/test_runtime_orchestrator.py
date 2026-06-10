@@ -32,7 +32,12 @@ from prompiler.backends.mock import MockAdapter
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.errors import AdapterError
-from prompiler.runtime.orchestrator import run, run_batch, run_sync
+from prompiler.runtime.orchestrator import (
+    result_cache_info,
+    run,
+    run_batch,
+    run_sync,
+)
 from prompiler.runtime.registry import Registry
 from prompiler.spec import EntitySpec
 
@@ -313,3 +318,87 @@ def test_run_propagates_capability_error_for_unsupported_modality() -> None:
         asyncio.run(
             run("doc", "body", backend=MockAdapter(), registry=registry, modal_parts=[audio])
         )
+
+
+class _OtherScriptedAdapter(_ScriptedAdapter):
+    """Distinct adapter subclass so the backend-identity cache dimension differs."""
+
+
+@pytest.mark.unit
+def test_result_cache_serves_repeated_identical_extract() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedAdapter([{"title": "only"}])
+
+    first = asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+    second = asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+
+    assert adapter.calls == 1
+    assert first.title == "only"  # type: ignore[attr-defined]
+    assert second.title == "only"  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_result_cache_misses_on_input_text_change() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedAdapter([{"title": "a"}, {"title": "b"}])
+
+    asyncio.run(run("doc", "first body", backend=adapter, registry=registry))
+    asyncio.run(run("doc", "second body", backend=adapter, registry=registry))
+
+    assert adapter.calls == 2
+
+
+@pytest.mark.unit
+def test_result_cache_misses_on_spec_change() -> None:
+    reg_a = _register("doc_a")
+    first_adapter = _ScriptedAdapter([{"title": "one"}])
+    asyncio.run(run("doc_a", "body", backend=first_adapter, registry=reg_a))
+
+    reg_b = _register("doc_b")
+    second_adapter = _ScriptedAdapter([{"title": "two"}])
+    result = asyncio.run(run("doc_b", "body", backend=second_adapter, registry=reg_b))
+
+    assert second_adapter.calls == 1
+    assert result.title == "two"  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_result_cache_misses_on_backend_class_change() -> None:
+    registry = _register("doc")
+    first_adapter = _ScriptedAdapter([{"title": "one"}])
+    asyncio.run(run("doc", "body", backend=first_adapter, registry=registry))
+
+    other_adapter = _OtherScriptedAdapter([{"title": "two"}])
+    result = asyncio.run(run("doc", "body", backend=other_adapter, registry=registry))
+
+    assert other_adapter.calls == 1
+    assert result.title == "two"  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_result_cache_misses_on_model_change() -> None:
+    registry = _register("doc")
+    first_adapter = _ScriptedAdapter([{"title": "one"}])
+    first_adapter._model = "model-a"  # type: ignore[attr-defined]
+    asyncio.run(run("doc", "body", backend=first_adapter, registry=registry))
+
+    second_adapter = _ScriptedAdapter([{"title": "two"}])
+    second_adapter._model = "model-b"  # type: ignore[attr-defined]
+    result = asyncio.run(run("doc", "body", backend=second_adapter, registry=registry))
+
+    assert second_adapter.calls == 1
+    assert result.title == "two"  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_result_cache_info_tracks_hits_misses_and_size() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedAdapter([{"title": "x"}])
+
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+
+    info = result_cache_info()
+    assert info.misses == 1
+    assert info.hits == 1
+    assert info.currsize == 1

@@ -41,9 +41,11 @@ in submission order.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import os
 import tomllib
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
 
@@ -54,7 +56,13 @@ from prompiler.backends.base import BackendAdapter, ExtractResult, ModalContent
 from prompiler.runtime.errors import ExtractionFailed
 from prompiler.runtime.registry import Registry, _resolve
 
-__all__ = ["run", "run_batch", "run_sync"]
+__all__ = [
+    "result_cache_clear",
+    "result_cache_info",
+    "run",
+    "run_batch",
+    "run_sync",
+]
 
 _INPUT_BLOCK_HEADER: Final[str] = "\n\n## Input\n"
 _CORRECTIVE_FEEDBACK_HEADER: Final[str] = (
@@ -83,6 +91,66 @@ _UNSET: Final[_Unset] = _Unset()
 # Process-lifetime set of backend class names already warned for non-determinism.
 # One WARN per non-seed backend per process (FR-14) — not per call.
 _warned_backends: set[str] = set()
+
+
+@dataclass(frozen=True)
+class ResultCacheInfo:
+    """Observable counters for the runtime result cache (FR-14)."""
+
+    hits: int
+    misses: int
+    currsize: int
+
+
+# Runtime result cache (B2 / FR-14). Keyed on the 4-tuple
+# ``(spec_hash, backend_class, model, input_hash)``. The cached value is the
+# *validated* model, not the raw ``ExtractResult`` — a hit short-circuits before
+# the doc-size guardrail, determinism config, and adapter dispatch, and a failing
+# first attempt is never stored so it cannot poison the validation-retry path.
+# Backend identity mirrors ``_warn_if_nondeterministic`` (class name) plus the
+# adapter's ``_model`` attribute when present (``None`` otherwise).
+_RESULT_CACHE: dict[tuple[str, str, str | None, str], BaseModel] = {}
+_RESULT_CACHE_STATS: dict[str, int] = {"hits": 0, "misses": 0}
+
+
+def _backend_identity(backend: BackendAdapter) -> tuple[str, str | None]:
+    model = getattr(backend, "_model", None)
+    return type(backend).__name__, model
+
+
+def _input_hash(text: str, modal_parts: Sequence[ModalContent]) -> str:
+    h = hashlib.sha256()
+    h.update(text.encode("utf-8"))
+    for part in modal_parts:
+        h.update(part.media_type.encode("utf-8"))
+        h.update(part.data)
+    return h.hexdigest()
+
+
+def _result_cache_key(
+    spec_hash: str,
+    backend: BackendAdapter,
+    text: str,
+    modal_parts: Sequence[ModalContent],
+) -> tuple[str, str, str | None, str]:
+    backend_class, model = _backend_identity(backend)
+    return spec_hash, backend_class, model, _input_hash(text, modal_parts)
+
+
+def result_cache_info() -> ResultCacheInfo:
+    """Return current result-cache hit/miss counts and resident entry count."""
+    return ResultCacheInfo(
+        hits=_RESULT_CACHE_STATS["hits"],
+        misses=_RESULT_CACHE_STATS["misses"],
+        currsize=len(_RESULT_CACHE),
+    )
+
+
+def result_cache_clear() -> None:
+    """Empty the result cache and zero the hit/miss counters (test isolation)."""
+    _RESULT_CACHE.clear()
+    _RESULT_CACHE_STATS["hits"] = 0
+    _RESULT_CACHE_STATS["misses"] = 0
 
 
 def _read_prompiler_block() -> dict[str, Any]:
@@ -178,6 +246,14 @@ async def run(
 ) -> BaseModel:
     """Run extraction for a single document. See module docstring."""
     bundle = _resolve(registry).get(name)
+
+    cache_key = _result_cache_key(bundle.spec_hash, backend, text, modal_parts)
+    cached = _RESULT_CACHE.get(cache_key)
+    if cached is not None:
+        _RESULT_CACHE_STATS["hits"] += 1
+        return cached
+    _RESULT_CACHE_STATS["misses"] += 1
+
     _check_doc_size(text, bundle.max_input_tokens)
 
     block = _read_prompiler_block()
@@ -197,7 +273,7 @@ async def run(
     )
     _trace_deterministic(result)
     try:
-        return bundle.pydantic_cls.model_validate(result.data)
+        validated = bundle.pydantic_cls.model_validate(result.data)
     except ValidationError as first_err:
         retry_prompt = _corrective_prompt(prompt, first_err)
         result = await backend.extract(
@@ -210,11 +286,14 @@ async def run(
         )
         _trace_deterministic(result)
         try:
-            return bundle.pydantic_cls.model_validate(result.data)
+            validated = bundle.pydantic_cls.model_validate(result.data)
         except ValidationError as second_err:
             raise ExtractionFailed(
                 f"validation failed after retry for spec {name!r}"
             ) from second_err
+
+    _RESULT_CACHE[cache_key] = validated
+    return validated
 
 
 def run_sync(
