@@ -14,13 +14,15 @@ conforms to the supplied JSON Schema.
 
 from __future__ import annotations
 
+import base64
 import copy
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -36,6 +38,36 @@ DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 DEFAULT_MAX_TOKENS = 4096
 EXTRACT_TOOL_NAME = "extract"
 EXTRACT_TOOL_DESCRIPTION = "Return structured data matching the provided JSON Schema."
+
+
+def _build_content(prompt: str, modal_parts: Sequence[ModalContent]) -> str | list[dict[str, Any]]:
+    """Project the prompt + modal parts into Anthropic's content dialect.
+
+    With no modal parts the content stays a plain string (the historical
+    shape). Image parts become ``{"type": "image", "source": {...base64...}}``
+    blocks alongside a leading text block. Audio is unsupported on Claude and
+    raises ``CapabilityError`` before any network call — a typed failure, not
+    a silent drop.
+    """
+    if not modal_parts:
+        return prompt
+    blocks: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    for part in modal_parts:
+        if part.modality == "audio":
+            raise CapabilityError(
+                "ClaudeAdapter cannot project audio input; only Gemini supports audio"
+            )
+        blocks.append(
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": part.media_type,
+                    "data": base64.b64encode(part.data).decode("ascii"),
+                },
+            }
+        )
+    return blocks
 
 
 class ClaudeAdapter:
@@ -88,12 +120,14 @@ class ClaudeAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
+        content = _build_content(prompt, modal_parts)
         payload: dict[str, Any] = {
             "model": self._model,
             "max_tokens": self._max_tokens,
             "temperature": temperature,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": content}],
             "tools": [
                 {
                     "name": EXTRACT_TOOL_NAME,
@@ -137,7 +171,7 @@ class ClaudeAdapter:
         )
 
     def supports(self, feature: str) -> bool:
-        return False
+        return feature == "multimodal"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

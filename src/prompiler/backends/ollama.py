@@ -17,14 +17,16 @@ in the response is that JSON string, which we ``json.loads`` into a dict.
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
     ObservabilityHook,
@@ -70,13 +72,24 @@ class OllamaAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
+        message: dict[str, Any] = {"role": "user", "content": prompt}
+        images: list[str] = []
+        for part in modal_parts:
+            if part.modality == "audio":
+                raise CapabilityError(
+                    "OllamaAdapter cannot project audio input; only Gemini supports audio"
+                )
+            images.append(base64.b64encode(part.data).decode("ascii"))
+        if images:
+            message["images"] = images
         options: dict[str, Any] = {"temperature": temperature}
         if seed is not None:
             options["seed"] = seed
         payload: dict[str, Any] = {
             "model": self._model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [message],
             "format": json_schema,
             "stream": False,
             "options": options,
@@ -122,7 +135,7 @@ class OllamaAdapter:
         )
 
     def supports(self, feature: str) -> bool:
-        return feature == "seed"
+        return feature in {"seed", "multimodal"}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

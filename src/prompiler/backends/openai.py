@@ -15,14 +15,16 @@ Schema; we parse it into a ``dict[str, Any]``.
 
 from __future__ import annotations
 
+import base64
 import copy
 import json
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -36,6 +38,33 @@ OPENAI_BASE_URL = "https://api.openai.com"
 DEFAULT_MODEL = "gpt-4o-mini"
 EXTRACT_TOOL_NAME = "extract"
 EXTRACT_TOOL_DESCRIPTION = "Return structured data matching the provided JSON Schema."
+
+
+def _build_content(prompt: str, modal_parts: Sequence[ModalContent]) -> str | list[dict[str, Any]]:
+    """Project the prompt + modal parts into OpenAI's content dialect.
+
+    With no modal parts the content stays a plain string (the historical
+    shape). Image parts become ``{"type": "image_url", "image_url": {"url":
+    "data:<mime>;base64,..."}}`` blocks alongside a leading text block. Audio
+    is unsupported on OpenAI and raises ``CapabilityError`` before any network
+    call — a typed failure, not a silent drop.
+    """
+    if not modal_parts:
+        return prompt
+    blocks: list[dict[str, Any]] = [{"type": "text", "text": prompt}]
+    for part in modal_parts:
+        if part.modality == "audio":
+            raise CapabilityError(
+                "OpenAIAdapter cannot project audio input; only Gemini supports audio"
+            )
+        b64 = base64.b64encode(part.data).decode("ascii")
+        blocks.append(
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:{part.media_type};base64,{b64}"},
+            }
+        )
+    return blocks
 
 
 class OpenAIAdapter:
@@ -85,10 +114,12 @@ class OpenAIAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
+        content = _build_content(prompt, modal_parts)
         payload: dict[str, Any] = {
             "model": self._model,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [{"role": "user", "content": content}],
             "temperature": temperature,
             "tools": [
                 {
@@ -154,7 +185,7 @@ class OpenAIAdapter:
         )
 
     def supports(self, feature: str) -> bool:
-        return feature == "seed"
+        return feature in {"seed", "multimodal"}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

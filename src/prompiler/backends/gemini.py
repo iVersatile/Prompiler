@@ -15,13 +15,15 @@ conforming to the supplied JSON Schema.
 
 from __future__ import annotations
 
+import base64
 import copy
+from collections.abc import Sequence
 from typing import Any, cast
 
 import httpx
 
 from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -128,9 +130,20 @@ class GeminiAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        for part in modal_parts:
+            parts.append(
+                {
+                    "inlineData": {
+                        "mimeType": part.media_type,
+                        "data": base64.b64encode(part.data).decode("ascii"),
+                    }
+                }
+            )
         payload: dict[str, Any] = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": temperature},
             "tools": [
                 {
@@ -189,7 +202,7 @@ class GeminiAdapter:
         )
 
     def supports(self, feature: str) -> bool:
-        return False
+        return feature == "multimodal"
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return cast("dict[str, Any]", _project_gemini(json_schema, depth=1))

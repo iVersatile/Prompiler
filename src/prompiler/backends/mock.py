@@ -25,9 +25,10 @@ equal dict.
 from __future__ import annotations
 
 import copy
+from collections.abc import Sequence
 from typing import Any
 
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
 
 
 class MockAdapter:
@@ -45,7 +46,13 @@ class MockAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
+        for part in modal_parts:
+            if part.modality == "audio":
+                raise CapabilityError(
+                    "MockAdapter cannot project audio input; only Gemini supports audio"
+                )
         required = json_schema.get("required", [])
         return ExtractResult(
             data={key: "mock" for key in required},
@@ -54,7 +61,7 @@ class MockAdapter:
         )
 
     def supports(self, feature: str) -> bool:
-        return feature == "seed"
+        return feature in {"seed", "multimodal"}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

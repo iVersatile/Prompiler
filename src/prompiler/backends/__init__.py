@@ -8,7 +8,12 @@ gemini / ollama in later P2.x tasks) live in sibling modules.
 
 from __future__ import annotations
 
-from prompiler.backends.base import BackendAdapter, ExtractResult
+from prompiler.backends.base import (
+    BackendAdapter,
+    CapabilityError,
+    ExtractResult,
+    ModalContent,
+)
 from prompiler.backends.claude import ClaudeAdapter
 from prompiler.backends.credentials import (
     Credential,
@@ -34,6 +39,7 @@ __all__ = [
     "DEFAULT_PRICING_TABLE",
     "BackendAdapter",
     "BackendCallMetrics",
+    "CapabilityError",
     "ClaudeAdapter",
     "Credential",
     "CredentialError",
@@ -42,6 +48,7 @@ __all__ = [
     "ExtractResult",
     "GeminiAdapter",
     "GoogleADCProvider",
+    "ModalContent",
     "ObservabilityHook",
     "OllamaAdapter",
     "OpenAIAdapter",

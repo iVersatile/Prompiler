@@ -26,8 +26,35 @@ tests cover behaviour.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
+
+from prompiler.spec.model import InputModality
+
+
+class CapabilityError(RuntimeError):
+    """Raised when a backend is asked to handle a modality it cannot project.
+
+    Mirrors ``CredentialError(RuntimeError)``: a clear, typed failure instead of
+    a silent drop. Today only audio on non-Gemini adapters triggers this — the
+    payload would otherwise be discarded with no signal to the caller.
+    """
+
+
+@dataclass(frozen=True)
+class ModalContent:
+    """One non-text input part threaded into a vendor extract payload.
+
+    ``data`` is raw bytes (already decoded from any source encoding); each
+    adapter base64-encodes it into its own payload dialect. ``media_type`` is
+    the IANA MIME type (``image/png``, ``audio/wav``). Frozen so a part cannot
+    mutate after a caller hands it to an adapter.
+    """
+
+    modality: InputModality
+    media_type: str
+    data: bytes
 
 
 @dataclass(frozen=True)
@@ -71,14 +98,22 @@ class BackendAdapter(Protocol):
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult: ...
 
     def supports(self, feature: str) -> bool:
-        """Report whether this backend honours a determinism ``feature``.
+        """Report whether this backend honours a capability ``feature``.
 
-        The only feature queried today is ``"seed"``: Ollama and OpenAI honour
-        a request seed (reproducible given fixed inputs); Claude and Gemini are
-        temperature-only and return False. Unknown features return False.
+        Two features are queried today:
+
+          * ``"seed"`` — Ollama and OpenAI honour a request seed (reproducible
+            given fixed inputs); Claude and Gemini are temperature-only and
+            return False.
+          * ``"multimodal"`` — every adapter returns True at the image
+            baseline; audio is Gemini-only and a non-Gemini adapter handed an
+            audio part raises ``CapabilityError`` rather than reporting False.
+
+        Unknown features return False.
         """
         ...
 
