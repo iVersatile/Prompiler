@@ -300,3 +300,54 @@ def test_label_minimal_parses() -> None:
     label = Label.model_validate({"name": "billing"})
     assert label.name == "billing"
     assert label.description is None
+
+
+# ---------------------------------------------------------------------------
+# Multi-modal input declaration (A1)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_input_modalities_defaults_to_text() -> None:
+    spec = EntitySpec.model_validate(_invoice_spec())
+    assert spec.input_modalities == ["text"]
+
+
+@pytest.mark.unit
+def test_input_modalities_accepts_image_and_audio() -> None:
+    data = _invoice_spec()
+    data["input_modalities"] = ["text", "image", "audio"]
+    spec = EntitySpec.model_validate(data)
+    assert spec.input_modalities == ["text", "image", "audio"]
+
+
+@pytest.mark.unit
+def test_input_modalities_image_only_spec_loads() -> None:
+    data = _invoice_spec()
+    data["input_modalities"] = ["image"]
+    spec = EntitySpec.model_validate(data)
+    assert spec.input_modalities == ["image"]
+
+
+@pytest.mark.unit
+def test_input_modalities_empty_rejected() -> None:
+    data = _invoice_spec()
+    data["input_modalities"] = []
+    with pytest.raises(ValidationError):
+        EntitySpec.model_validate(data)
+
+
+@pytest.mark.unit
+def test_input_modalities_duplicate_rejected() -> None:
+    data = _invoice_spec()
+    data["input_modalities"] = ["text", "text"]
+    with pytest.raises(ValidationError):
+        EntitySpec.model_validate(data)
+
+
+@pytest.mark.unit
+def test_input_modalities_unknown_value_rejected() -> None:
+    data = _invoice_spec()
+    data["input_modalities"] = ["video"]
+    with pytest.raises(ValidationError):
+        EntitySpec.model_validate(data)

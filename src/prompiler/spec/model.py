@@ -20,6 +20,10 @@ FieldType = Literal[
 
 _NUMERIC_TYPES: frozenset[str] = frozenset({"integer", "decimal"})
 
+InputModality = Literal["text", "image", "audio"]
+
+_DEFAULT_MODALITIES: list[InputModality] = ["text"]
+
 
 class Constraint(BaseModel):
     """Cross-field constraint expression with severity."""
@@ -105,6 +109,15 @@ class EntitySpec(BaseModel):
     cross_field_constraints: list[Constraint] = Field(default_factory=list)
     allow_multi_label: bool = False
     max_input_tokens: int | None = Field(default=None, ge=1)
+    input_modalities: list[InputModality] = Field(default_factory=lambda: list(_DEFAULT_MODALITIES))
+
+    @model_validator(mode="after")
+    def _check_input_modalities(self) -> EntitySpec:
+        if len(self.input_modalities) == 0:
+            raise ValueError("`input_modalities` must be non-empty")
+        if len(set(self.input_modalities)) != len(self.input_modalities):
+            raise ValueError("`input_modalities` must be unique")
+        return self
 
     @model_validator(mode="after")
     def _check_task_payload(self) -> EntitySpec:
