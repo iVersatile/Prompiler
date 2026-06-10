@@ -144,17 +144,17 @@ both but does not conflate their keys.
 - [x] **B2. Runtime result cache (FR-14).** Cache `extract` results keyed on
   `(spec_hash, backend, model, input_hash)`. *Exit:* repeated identical extract
   is served from cache (no adapter `call`); any tuple-element change misses.
-- [~] **B3. Cache invalidation + opt-out.** Cache respects `spec_hash` /
+- [x] **B3. Cache invalidation + opt-out.** Cache respects `spec_hash` /
   protocol-version changes automatically; expose a disable switch. *Exit:* test
   shows a protocol-version bump invalidates stale entries; disable flag forces
   recompute.
 
 ### Q1 exit criteria (phase-done, feeds §7 gate)
 
-- [ ] All A* and B* boxes checked; full suite green; coverage ≥ 80%.
-- [ ] mypy strict clean across touched modules.
-- [ ] `COMPILER_PROTOCOL_VERSION` bump (A3) reflected in any golden fixtures.
-- [ ] No prompt/response payloads logged below `trace` (RULES.md §8) — modal
+- [x] All A* and B* boxes checked; full suite green; coverage ≥ 80%.
+- [x] mypy strict clean across touched modules.
+- [x] `COMPILER_PROTOCOL_VERSION` bump (A3) reflected in any golden fixtures.
+- [x] No prompt/response payloads logged below `trace` (RULES.md §8) — modal
   bytes are payloads, audit the new adapter code for leakage.
 
 ---
