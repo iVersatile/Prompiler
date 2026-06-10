@@ -402,3 +402,86 @@ def test_result_cache_info_tracks_hits_misses_and_size() -> None:
     assert info.misses == 1
     assert info.hits == 1
     assert info.currsize == 1
+
+
+# --- B3: cache invalidation + opt-out (PLAN.md L147-150) ----------------------
+
+
+@pytest.mark.unit
+def test_result_cache_invalidated_by_protocol_version_bump(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A COMPILER_PROTOCOL_VERSION bump changes spec_hash -> stale entries miss."""
+    spec = _build_simple_spec("doc")
+
+    reg_v1 = Registry()
+    reg_v1.register("doc", compile_spec(spec))
+    adapter = _ScriptedAdapter([{"title": "v1"}, {"title": "v2"}])
+    first = asyncio.run(run("doc", "body", backend=adapter, registry=reg_v1))
+
+    monkeypatch.setattr("prompiler.spec.hash.COMPILER_PROTOCOL_VERSION", "999")
+    reg_v2 = Registry()
+    reg_v2.register("doc", compile_spec(spec))
+    second = asyncio.run(run("doc", "body", backend=adapter, registry=reg_v2))
+
+    assert adapter.calls == 2
+    assert first.title == "v1"  # type: ignore[attr-defined]
+    assert second.title == "v2"  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_disable_cache_kwarg_forces_recompute() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedAdapter([{"title": "one"}, {"title": "two"}])
+
+    first = asyncio.run(run("doc", "body", backend=adapter, registry=registry, disable_cache=True))
+    second = asyncio.run(run("doc", "body", backend=adapter, registry=registry, disable_cache=True))
+
+    assert adapter.calls == 2
+    assert first.title == "one"  # type: ignore[attr-defined]
+    assert second.title == "two"  # type: ignore[attr-defined]
+    info = result_cache_info()
+    assert info.currsize == 0
+    assert info.hits == 0
+    assert info.misses == 0
+
+
+@pytest.mark.unit
+def test_disable_cache_env_var_forces_recompute(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("PROMPILER_DISABLE_CACHE", "1")
+    registry = _register("doc")
+    adapter = _ScriptedAdapter([{"title": "one"}, {"title": "two"}])
+
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+
+    assert adapter.calls == 2
+    assert result_cache_info().currsize == 0
+
+
+@pytest.mark.unit
+def test_disable_cache_env_var_non_one_value_keeps_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """LL-005: the env gate compares string equality to ``"1"``, not truthiness."""
+    monkeypatch.setenv("PROMPILER_DISABLE_CACHE", "0")
+    registry = _register("doc")
+    adapter = _ScriptedAdapter([{"title": "only"}])
+
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry))
+
+    assert adapter.calls == 1
+
+
+@pytest.mark.unit
+def test_disable_cache_kwarg_false_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Precedence (LL-008): an explicit kwarg wins over the env var."""
+    monkeypatch.setenv("PROMPILER_DISABLE_CACHE", "1")
+    registry = _register("doc")
+    adapter = _ScriptedAdapter([{"title": "only"}])
+
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry, disable_cache=False))
+    asyncio.run(run("doc", "body", backend=adapter, registry=registry, disable_cache=False))
+
+    assert adapter.calls == 1

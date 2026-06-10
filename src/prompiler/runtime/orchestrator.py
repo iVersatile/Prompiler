@@ -76,8 +76,10 @@ _DEFAULT_BATCH_CONCURRENCY: Final[int] = 8
 # kwarg -> env var -> pyproject.toml [tool.prompiler] -> hardcoded default.
 _TEMPERATURE_ENV: Final[str] = "PROMPILER_TEMPERATURE"
 _SEED_ENV: Final[str] = "PROMPILER_SEED"
+_DISABLE_CACHE_ENV: Final[str] = "PROMPILER_DISABLE_CACHE"
 _DEFAULT_TEMPERATURE: Final[float] = 0.0
 _DEFAULT_SEED: Final[int] = 42
+_DEFAULT_DISABLE_CACHE: Final[bool] = False
 
 _logger = obs.get_logger("prompiler.orchestrator")
 
@@ -188,6 +190,17 @@ def _resolve_seed(seed: int | None | _Unset, block: dict[str, Any]) -> int | Non
     return _DEFAULT_SEED
 
 
+def _resolve_cache_disabled(disabled: bool | _Unset, block: dict[str, Any]) -> bool:
+    if not isinstance(disabled, _Unset):
+        return disabled
+    env = os.environ.get(_DISABLE_CACHE_ENV)
+    if env is not None:
+        return env == "1"
+    if "disable_cache" in block:
+        return bool(block["disable_cache"])
+    return _DEFAULT_DISABLE_CACHE
+
+
 def _warn_if_nondeterministic(backend: BackendAdapter) -> None:
     """Emit one WARN per non-seed backend per process (FR-14)."""
     if backend.supports("seed"):
@@ -243,20 +256,23 @@ async def run(
     temperature: float | _Unset = _UNSET,
     seed: int | None | _Unset = _UNSET,
     modal_parts: Sequence[ModalContent] = (),
+    disable_cache: bool | _Unset = _UNSET,
 ) -> BaseModel:
     """Run extraction for a single document. See module docstring."""
     bundle = _resolve(registry).get(name)
+    block = _read_prompiler_block()
+    cache_disabled = _resolve_cache_disabled(disable_cache, block)
 
     cache_key = _result_cache_key(bundle.spec_hash, backend, text, modal_parts)
-    cached = _RESULT_CACHE.get(cache_key)
-    if cached is not None:
-        _RESULT_CACHE_STATS["hits"] += 1
-        return cached
-    _RESULT_CACHE_STATS["misses"] += 1
+    if not cache_disabled:
+        cached = _RESULT_CACHE.get(cache_key)
+        if cached is not None:
+            _RESULT_CACHE_STATS["hits"] += 1
+            return cached
+        _RESULT_CACHE_STATS["misses"] += 1
 
     _check_doc_size(text, bundle.max_input_tokens)
 
-    block = _read_prompiler_block()
     resolved_temperature = _resolve_temperature(temperature, block)
     resolved_seed = _resolve_seed(seed, block)
     _warn_if_nondeterministic(backend)
@@ -292,7 +308,8 @@ async def run(
                 f"validation failed after retry for spec {name!r}"
             ) from second_err
 
-    _RESULT_CACHE[cache_key] = validated
+    if not cache_disabled:
+        _RESULT_CACHE[cache_key] = validated
     return validated
 
 
@@ -306,6 +323,7 @@ def run_sync(
     temperature: float | _Unset = _UNSET,
     seed: int | None | _Unset = _UNSET,
     modal_parts: Sequence[ModalContent] = (),
+    disable_cache: bool | _Unset = _UNSET,
 ) -> BaseModel:
     """Sync wrapper over :func:`run` via :func:`asyncio.run`."""
     return asyncio.run(
@@ -318,6 +336,7 @@ def run_sync(
             temperature=temperature,
             seed=seed,
             modal_parts=modal_parts,
+            disable_cache=disable_cache,
         )
     )
 
@@ -333,6 +352,7 @@ async def run_batch(
     temperature: float | _Unset = _UNSET,
     seed: int | None | _Unset = _UNSET,
     modal_parts: Sequence[ModalContent] = (),
+    disable_cache: bool | _Unset = _UNSET,
 ) -> list[BaseModel | Exception]:
     """Run extraction over many documents with per-item isolation.
 
@@ -354,6 +374,7 @@ async def run_batch(
                     temperature=temperature,
                     seed=seed,
                     modal_parts=modal_parts,
+                    disable_cache=disable_cache,
                 )
             except Exception as err:
                 return err
