@@ -16,12 +16,13 @@ Adapter is fully scripted; no network, no API key.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from typing import Any, Final
 
 import pytest
 from pydantic import BaseModel
 
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.compiler import compile_spec
 from prompiler.runtime.orchestrator import run
 from prompiler.runtime.registry import Registry
@@ -65,6 +66,7 @@ class _RecordingScriptedAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.calls += 1
         self.prompts.append(prompt)

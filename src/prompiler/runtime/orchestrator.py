@@ -104,14 +104,17 @@ class ResultCacheInfo:
     currsize: int
 
 
-# Runtime result cache (B2 / FR-14). Keyed on the 4-tuple
-# ``(spec_hash, backend_class, model, input_hash)``. The cached value is the
-# *validated* model, not the raw ``ExtractResult`` — a hit short-circuits before
-# the doc-size guardrail, determinism config, and adapter dispatch, and a failing
-# first attempt is never stored so it cannot poison the validation-retry path.
-# Backend identity mirrors ``_warn_if_nondeterministic`` (class name) plus the
-# adapter's ``_model`` attribute when present (``None`` otherwise).
-_RESULT_CACHE: dict[tuple[str, str, str | None, str], BaseModel] = {}
+# Runtime result cache (B2 / FR-14). Keyed on the 5-tuple
+# ``(spec_hash, backend_class, model, input_hash, prompt_hash)``. The cached
+# value is the *validated* model, not the raw ``ExtractResult`` — a hit
+# short-circuits before the doc-size guardrail, determinism config, and adapter
+# dispatch, and a failing first attempt is never stored so it cannot poison the
+# validation-retry path. Backend identity mirrors ``_warn_if_nondeterministic``
+# (class name) plus the adapter's ``_model`` attribute when present (``None``
+# otherwise). ``prompt_hash`` covers ``bundle.prompt`` because the refine loop
+# patches the prompt via ``dataclasses.replace`` while leaving ``spec_hash``
+# constant; without it a hit would return the pre-refine degraded extraction.
+_RESULT_CACHE: dict[tuple[str, str, str | None, str, str], BaseModel] = {}
 _RESULT_CACHE_STATS: dict[str, int] = {"hits": 0, "misses": 0}
 
 
@@ -134,9 +137,17 @@ def _result_cache_key(
     backend: BackendAdapter,
     text: str,
     modal_parts: Sequence[ModalContent],
-) -> tuple[str, str, str | None, str]:
+    prompt: str,
+) -> tuple[str, str, str | None, str, str]:
     backend_class, model = _backend_identity(backend)
-    return spec_hash, backend_class, model, _input_hash(text, modal_parts)
+    prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    return (
+        spec_hash,
+        backend_class,
+        model,
+        _input_hash(text, modal_parts),
+        prompt_hash,
+    )
 
 
 def result_cache_info() -> ResultCacheInfo:
@@ -263,7 +274,7 @@ async def run(
     block = _read_prompiler_block()
     cache_disabled = _resolve_cache_disabled(disable_cache, block)
 
-    cache_key = _result_cache_key(bundle.spec_hash, backend, text, modal_parts)
+    cache_key = _result_cache_key(bundle.spec_hash, backend, text, modal_parts, bundle.prompt)
     if not cache_disabled:
         cached = _RESULT_CACHE.get(cache_key)
         if cached is not None:

@@ -21,11 +21,12 @@ enum/date/decimal ``str()`` ambiguity in the differ.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Sequence
 from typing import Any, Final
 
 import pytest
 
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.compiler import compile_spec
 from prompiler.eval.fixtures import FixtureCase
 from prompiler.eval.runner import run_eval
@@ -153,6 +154,7 @@ class _PromptSensitiveAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.seen_prompts.append(prompt)
         refined = _REFINED_MARKER in prompt
@@ -185,6 +187,7 @@ class _TutorAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         return ExtractResult(data=dict(self._payload), system_fingerprint=None, deterministic=True)
 
@@ -284,6 +287,7 @@ class _DecliningTutorAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         return ExtractResult(data=dict(self._payload), system_fingerprint=None, deterministic=True)
 
@@ -378,6 +382,7 @@ class _ContactAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.seen_prompts.append(prompt)
         refined = _CONTACT_REFINED_MARKER in prompt.lower()

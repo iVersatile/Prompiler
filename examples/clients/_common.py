@@ -16,10 +16,11 @@ scripts do not drift:
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from typing import Any
 
 from prompiler.backends import BackendAdapter, ClaudeAdapter
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 
 
 class ScriptedBackend:
@@ -42,6 +43,7 @@ class ScriptedBackend:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.calls += 1
         return ExtractResult(

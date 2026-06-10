@@ -20,13 +20,14 @@ Adapter is fully scripted; no network, no API key.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any, Final
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.orchestrator import run
@@ -112,6 +113,7 @@ class _ScriptedAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.calls += 1
         assert self._script, (
