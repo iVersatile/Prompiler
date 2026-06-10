@@ -4,7 +4,7 @@ from __future__ import annotations
 
 __version__ = "0.1.3"
 
-COMPILER_PROTOCOL_VERSION = "1"
+COMPILER_PROTOCOL_VERSION = "2"
 """Compiler protocol version used in spec_hash derivation.
 
 Bumped only when one of the following changes in a way that would

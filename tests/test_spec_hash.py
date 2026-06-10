@@ -199,7 +199,7 @@ def test_spec_hash_changes_with_protocol_version(
     """Bumping COMPILER_PROTOCOL_VERSION MUST invalidate the hash."""
     spec = _load(tmp_path, "invoice.yaml", _invoice_spec())
     h_v1 = spec_hash(spec)
-    monkeypatch.setattr("prompiler.spec.hash.COMPILER_PROTOCOL_VERSION", "2")
+    monkeypatch.setattr("prompiler.spec.hash.COMPILER_PROTOCOL_VERSION", "999")
     h_v2 = spec_hash(spec)
     assert h_v1 != h_v2
 

@@ -2,7 +2,7 @@
 
 Covers PLAN.md L102:
 - ``render(spec) -> str`` produces a parseable, standalone Python module.
-- Generated file pins ``COMPILER_PROTOCOL_VERSION = "1"`` and
+- Generated file pins ``COMPILER_PROTOCOL_VERSION = "2"`` and
   ``SPEC_HASH = "<digest>"`` as module-level literals (drift detector).
 - Generated file imports only stdlib + ``pydantic`` — no ``prompiler.*``
   runtime dependency (PLAN.md L102: "without a `prompiler` runtime
