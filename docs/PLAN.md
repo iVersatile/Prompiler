@@ -122,7 +122,7 @@ both but does not conflate their keys.
 - [x] **A2. spec_hash covers modal fields.** Confirm `spec_hash` digest changes
   when a modal field is added/removed (canonical-YAML folds the new keys).
   *Exit:* round-trip test asserts hash inequality across modal-vs-text spec.
-- [ ] **A3. COMPILER_PROTOCOL_VERSION decision.** Modal fields change per-adapter
+- [x] **A3. COMPILER_PROTOCOL_VERSION decision.** Modal fields change per-adapter
   projection schema → bump `COMPILER_PROTOCOL_VERSION` in
   `src/prompiler/__init__.py` (RULES.md §10). *Exit:* version-bump rationale
   recorded in commit body; protocol-version test updated.
