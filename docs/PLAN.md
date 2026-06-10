@@ -114,7 +114,7 @@ both but does not conflate their keys.
 
 ### Track A — Multi-modal input (LARGE, single-owner)
 
-- [ ] **A1. Spec schema: add modal field types.** Extend `FieldType` /
+- [x] **A1. Spec schema: add modal field types.** Extend `FieldType` /
   `EntitySpec` in `src/prompiler/spec/model.py` to accept image/audio input
   declarations, with `extra="forbid"` invariants and a `model_validator` clause.
   *Exit:* new validator unit tests pass (valid modal spec loads; malformed modal
