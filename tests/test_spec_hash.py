@@ -225,6 +225,41 @@ def test_canonical_yaml_is_deterministic(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Modal-field sensitivity (A2): input_modalities folds into the digest
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_spec_hash_changes_when_modal_field_added(tmp_path: Path) -> None:
+    """A text-only spec and an image-enabled spec MUST hash differently."""
+    text_spec = _load(tmp_path, "text.yaml", _invoice_spec())
+    modal_data = _invoice_spec()
+    modal_data["input_modalities"] = ["text", "image"]
+    modal_spec = _load(tmp_path, "modal.yaml", modal_data)
+    assert spec_hash(text_spec) != spec_hash(modal_spec)
+
+
+@pytest.mark.unit
+def test_spec_hash_changes_when_modal_field_removed(tmp_path: Path) -> None:
+    """Dropping a declared modality back to the default MUST change the hash."""
+    modal_data = _invoice_spec()
+    modal_data["input_modalities"] = ["text", "audio"]
+    modal_spec = _load(tmp_path, "modal.yaml", modal_data)
+    text_spec = _load(tmp_path, "text.yaml", _invoice_spec())
+    assert spec_hash(modal_spec) != spec_hash(text_spec)
+
+
+@pytest.mark.unit
+def test_spec_hash_invariant_when_modalities_match(tmp_path: Path) -> None:
+    """Explicit default modalities hash identically to the elided default."""
+    explicit_data = _invoice_spec()
+    explicit_data["input_modalities"] = ["text"]
+    explicit_spec = _load(tmp_path, "explicit.yaml", explicit_data)
+    elided_spec = _load(tmp_path, "elided.yaml", _invoice_spec())
+    assert spec_hash(explicit_spec) == spec_hash(elided_spec)
+
+
+# ---------------------------------------------------------------------------
 # PRD §5 fixtures both hash; distinct specs -> distinct hashes
 # ---------------------------------------------------------------------------
 
