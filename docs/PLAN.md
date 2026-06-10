@@ -126,7 +126,7 @@ both but does not conflate their keys.
   projection schema → bump `COMPILER_PROTOCOL_VERSION` in
   `src/prompiler/__init__.py` (RULES.md §10). *Exit:* version-bump rationale
   recorded in commit body; protocol-version test updated.
-- [ ] **A4. Adapter payloads — 4 backends.** Thread modal content through
+- [x] **A4. Adapter payloads — 4 backends.** Thread modal content through
   `BackendAdapter.call` payload construction for claude/openai/gemini/ollama
   (`src/prompiler/backends/*.py`); gate via `supports("multimodal")`. *Exit:*
   per-adapter payload tests assert correct modal block shape; unsupported
