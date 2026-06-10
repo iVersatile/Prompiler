@@ -50,19 +50,58 @@ class ArtefactBundle:
     max_input_tokens: int | None = None
 
 
+@dataclass(frozen=True)
+class CompileCacheInfo:
+    """Observable counters for the compile-side memoization cache."""
+
+    hits: int
+    misses: int
+    currsize: int
+
+
+_COMPILE_CACHE: dict[str, ArtefactBundle] = {}
+_CACHE_STATS: dict[str, int] = {"hits": 0, "misses": 0}
+
+
 def compile_spec(spec: EntitySpec) -> ArtefactBundle:
     """Compile an EntitySpec into an ArtefactBundle.
 
     Pure — does not mutate ``spec``. Deterministic — repeat calls on
     the same input produce field-equal artefacts.
+
+    Memoized on ``spec_hash``: a second call on a field-equal spec is a
+    cache hit returning the same bundle, which is strictly stronger than
+    the field-equal determinism contract. Observe via
+    :func:`compile_cache_info`; reset via :func:`compile_cache_clear`.
     """
-    prompt = synthesize_prompt(spec)
-    pydantic_cls = synthesize_model(spec)
     digest = spec_hash(spec)
-    return ArtefactBundle(
-        prompt=prompt,
-        pydantic_cls=pydantic_cls,
+    cached = _COMPILE_CACHE.get(digest)
+    if cached is not None:
+        _CACHE_STATS["hits"] += 1
+        return cached
+    _CACHE_STATS["misses"] += 1
+    bundle = ArtefactBundle(
+        prompt=synthesize_prompt(spec),
+        pydantic_cls=synthesize_model(spec),
         tool_schema_per_backend=_EMPTY_BACKEND_SCHEMAS,
         spec_hash=digest,
         max_input_tokens=spec.max_input_tokens,
     )
+    _COMPILE_CACHE[digest] = bundle
+    return bundle
+
+
+def compile_cache_info() -> CompileCacheInfo:
+    """Return current cache hit/miss counts and resident entry count."""
+    return CompileCacheInfo(
+        hits=_CACHE_STATS["hits"],
+        misses=_CACHE_STATS["misses"],
+        currsize=len(_COMPILE_CACHE),
+    )
+
+
+def compile_cache_clear() -> None:
+    """Empty the cache and zero the hit/miss counters (test isolation)."""
+    _COMPILE_CACHE.clear()
+    _CACHE_STATS["hits"] = 0
+    _CACHE_STATS["misses"] = 0

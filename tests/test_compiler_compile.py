@@ -38,7 +38,13 @@ from pydantic import BaseModel, ValidationError
 
 import prompiler
 from prompiler import ArtefactBundle, compile
-from prompiler.compiler import compile_spec, synthesize_prompt, synthesize_schema
+from prompiler.compiler import (
+    compile_cache_clear,
+    compile_cache_info,
+    compile_spec,
+    synthesize_prompt,
+    synthesize_schema,
+)
 from prompiler.spec import EntitySpec, spec_hash
 
 
@@ -473,3 +479,68 @@ def test_compile_does_not_mutate_input_spec() -> None:
     compile(spec)
     after = spec.model_dump()
     assert before == after
+
+
+# ---------------------------------------------------------------------------
+# Compile-side memoization — PLAN.md B1
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_compile_cache_info_exposed() -> None:
+    """compile_cache_info() exposes hits/misses/currsize as ints."""
+    compile_cache_clear()
+    info = compile_cache_info()
+    assert isinstance(info.hits, int)
+    assert isinstance(info.misses, int)
+    assert isinstance(info.currsize, int)
+    assert info.hits == 0
+    assert info.misses == 0
+    assert info.currsize == 0
+
+
+@pytest.mark.unit
+def test_second_compile_on_field_equal_spec_is_cache_hit() -> None:
+    """B1 exit: second compile on a field-equal spec is a cache hit."""
+    compile_cache_clear()
+    compile(_extract_spec())
+    compile(_extract_spec())
+    info = compile_cache_info()
+    assert info.misses == 1
+    assert info.hits == 1
+    assert info.currsize == 1
+
+
+@pytest.mark.unit
+def test_cache_hit_returns_field_equal_artefacts() -> None:
+    """B1 exit: cache hit preserves the determinism contract (field-equal)."""
+    compile_cache_clear()
+    first = compile(_extract_spec())
+    second = compile(_extract_spec())
+    assert second.prompt == first.prompt
+    assert second.spec_hash == first.spec_hash
+    assert second.max_input_tokens == first.max_input_tokens
+    assert second.pydantic_cls.model_json_schema() == first.pydantic_cls.model_json_schema()
+
+
+@pytest.mark.unit
+def test_distinct_specs_do_not_collide_in_cache() -> None:
+    """Distinct specs occupy distinct cache slots — no false hit."""
+    compile_cache_clear()
+    compile(_extract_spec())
+    compile(_classify_spec(allow_multi_label=True))
+    info = compile_cache_info()
+    assert info.misses == 2
+    assert info.hits == 0
+    assert info.currsize == 2
+
+
+@pytest.mark.unit
+def test_compile_cache_clear_resets_counters_and_store() -> None:
+    """compile_cache_clear() empties the store and zeroes the counters."""
+    compile(_extract_spec())
+    compile_cache_clear()
+    info = compile_cache_info()
+    assert info.hits == 0
+    assert info.misses == 0
+    assert info.currsize == 0
