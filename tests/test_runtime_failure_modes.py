@@ -27,12 +27,13 @@ functions.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from typing import Any, Final
 
 import pytest
 from pydantic import ValidationError
 
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.errors import AdapterError
@@ -76,6 +77,7 @@ class _ScriptedAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.calls += 1
         assert self._script, (
@@ -161,6 +163,7 @@ def test_timeout_propagates_without_orchestrator_retry() -> None:
             timeout: float | None = None,
             temperature: float = 0.0,
             seed: int | None = 42,
+            modal_parts: Sequence[ModalContent] = (),
         ) -> ExtractResult:
             self.calls += 1
             await asyncio.sleep(10)

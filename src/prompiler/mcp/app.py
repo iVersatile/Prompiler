@@ -21,6 +21,7 @@ payload sizes"); an oversized request is rejected before reaching a backend.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Mapping
 from typing import Any
@@ -28,6 +29,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent
 
+from prompiler.backends.base import ModalContent
 from prompiler.backends.observability import BackendCallMetrics
 from prompiler.eval.runner import CapturingHook
 from prompiler.runtime import orchestrator
@@ -51,6 +53,25 @@ def _usage_meta(metric: BackendCallMetrics) -> dict[str, Any]:
             "cost_usd": metric.cost_usd,
         }
     }
+
+
+def _decode_modal_parts(raw: list[dict[str, Any]] | None) -> tuple[ModalContent, ...]:
+    """Rebuild ``ModalContent`` parts from the JSON-over-the-wire tool input.
+
+    Each inbound dict carries ``data`` as base64 text (JSON can't hold raw
+    bytes); we decode it back to the ``bytes`` that ``ModalContent`` expects so
+    the adapter receives the same payload an in-process caller would pass.
+    """
+    if not raw:
+        return ()
+    return tuple(
+        ModalContent(
+            modality=p["modality"],
+            media_type=p["media_type"],
+            data=base64.b64decode(p["data"]),
+        )
+        for p in raw
+    )
 
 
 def build_mcp(
@@ -105,11 +126,17 @@ def _register_tool(
 ) -> None:
     model_cls = bundle.pydantic_cls
 
-    async def _tool(text: str) -> Any:
+    async def _tool(text: str, modal_parts: list[dict[str, Any]] | None = None) -> Any:
         if len(text.encode("utf-8")) > MAX_TEXT_BYTES:
             raise ValueError(f"text exceeds {MAX_TEXT_BYTES} bytes; split the input before calling")
         before = len(usage_hook.calls) if usage_hook is not None else 0
-        model = await orchestrator.run(spec_name, text, backend=backend, registry=registry)
+        model = await orchestrator.run(
+            spec_name,
+            text,
+            backend=backend,
+            registry=registry,
+            modal_parts=_decode_modal_parts(modal_parts),
+        )
         structured = model.model_dump(mode="json")
         meta: dict[str, Any] | None = None
         if usage_hook is not None:
@@ -123,7 +150,11 @@ def _register_tool(
             _meta=meta,
         )
 
-    _tool.__annotations__ = {"text": str, "return": model_cls}
+    _tool.__annotations__ = {
+        "text": str,
+        "modal_parts": list[dict[str, Any]],
+        "return": model_cls,
+    }
     mcp.add_tool(
         _tool,
         name=spec_name,

@@ -21,13 +21,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from collections.abc import Sequence
 from typing import Any
 
 import httpx
 import pytest
 
 from prompiler import obs
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.backends.ollama import OllamaAdapter
 from prompiler.backends.openai import OpenAIAdapter
 from prompiler.compiler import compile_spec
@@ -225,6 +226,7 @@ class _CapturingScriptedAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.temperatures.append(temperature)
         self.seeds.append(seed)

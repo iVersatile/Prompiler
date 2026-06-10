@@ -21,12 +21,14 @@ default pytest configuration.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
+from prompiler.backends.mock import MockAdapter
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.errors import AdapterError
@@ -77,6 +79,7 @@ class _ScriptedAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.calls += 1
         self.prompts.append(prompt)
@@ -110,6 +113,7 @@ class _CountingAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         async with self._lock:
             self._in_flight += 1
@@ -285,3 +289,27 @@ def test_run_batch_isolates_per_item_failures() -> None:
     assert isinstance(results[1], AdapterError)
     assert results[1] is boom
     assert isinstance(results[2], BaseModel)
+
+
+@pytest.mark.unit
+def test_run_threads_modal_parts_to_mock_adapter() -> None:
+    registry = _register("doc")
+    image = ModalContent(modality="image", media_type="image/png", data=b"\x89PNG\r\n\x1a\nfake")
+
+    result = asyncio.run(
+        run("doc", "body", backend=MockAdapter(), registry=registry, modal_parts=[image])
+    )
+
+    assert isinstance(result, BaseModel)
+    assert result.title == "mock"  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_run_propagates_capability_error_for_unsupported_modality() -> None:
+    registry = _register("doc")
+    audio = ModalContent(modality="audio", media_type="audio/wav", data=b"RIFFfake")
+
+    with pytest.raises(CapabilityError):
+        asyncio.run(
+            run("doc", "body", backend=MockAdapter(), registry=registry, modal_parts=[audio])
+        )

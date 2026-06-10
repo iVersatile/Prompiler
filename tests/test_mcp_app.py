@@ -20,6 +20,7 @@ each case drives the coroutine through ``asyncio.run``.
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 from collections.abc import Awaitable
 from typing import Any, TypeVar
@@ -27,6 +28,7 @@ from typing import Any, TypeVar
 import pytest
 
 from conftest import ScriptedAdapter
+from prompiler.backends.mock import MockAdapter
 from prompiler.compiler import compile_spec
 from prompiler.eval.runner import CapturingHook
 from prompiler.mcp.app import MAX_TEXT_BYTES, build_mcp
@@ -167,3 +169,40 @@ def test_tool_call_returns_structured_content_and_usage_meta() -> None:
     usage = result.meta["usage"]
     assert usage["prompt_tokens"] == 7
     assert usage["completion_tokens"] == 3
+
+
+_TITLE_SPEC: dict[str, Any] = {
+    "spec_version": 1,
+    "name": "doc",
+    "task": "extract",
+    "fields": [{"name": "title", "type": "string", "required": True}],
+}
+
+
+@pytest.mark.unit
+def test_tool_call_threads_image_modal_parts_to_mock_adapter() -> None:
+    reg = _registry(_TITLE_SPEC)
+    mcp = build_mcp(reg, MockAdapter())
+    part = {
+        "modality": "image",
+        "media_type": "image/png",
+        "data": base64.b64encode(b"\x89PNG\r\n\x1a\nfake").decode("ascii"),
+    }
+    result = _run(mcp.call_tool("doc", {"text": "body", "modal_parts": [part]}))
+    assert result.structuredContent == {"title": "mock"}
+
+
+@pytest.mark.unit
+def test_tool_call_propagates_modal_capability_error() -> None:
+    # MockAdapter raises CapabilityError on audio; this only fires if the tool
+    # actually threads modal_parts into the adapter. A dropped arg would let the
+    # call succeed, so this asserts real end-to-end modal threading.
+    reg = _registry(_TITLE_SPEC)
+    mcp = build_mcp(reg, MockAdapter())
+    part = {
+        "modality": "audio",
+        "media_type": "audio/wav",
+        "data": base64.b64encode(b"RIFFfake").decode("ascii"),
+    }
+    with pytest.raises(Exception):  # noqa: B017 — FastMCP wraps CapabilityError
+        _run(mcp.call_tool("doc", {"text": "body", "modal_parts": [part]}))

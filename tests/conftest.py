@@ -7,12 +7,13 @@ inserts the conftest directory onto ``sys.path`` during collection.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
 
 import prompiler.runtime.registry as registry_module
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.backends.observability import (
     ObservabilityHook,
     PricingTable,
@@ -76,6 +77,7 @@ class ScriptedAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.calls += 1
         head = self._script.pop(0)

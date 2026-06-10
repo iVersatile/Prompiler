@@ -50,7 +50,7 @@ from typing import Any, Final
 from pydantic import BaseModel, ValidationError
 
 from prompiler import obs
-from prompiler.backends.base import BackendAdapter, ExtractResult
+from prompiler.backends.base import BackendAdapter, ExtractResult, ModalContent
 from prompiler.runtime.errors import ExtractionFailed
 from prompiler.runtime.registry import Registry, _resolve
 
@@ -174,6 +174,7 @@ async def run(
     timeout: float | None = None,
     temperature: float | _Unset = _UNSET,
     seed: int | None | _Unset = _UNSET,
+    modal_parts: Sequence[ModalContent] = (),
 ) -> BaseModel:
     """Run extraction for a single document. See module docstring."""
     bundle = _resolve(registry).get(name)
@@ -192,6 +193,7 @@ async def run(
         timeout=timeout,
         temperature=resolved_temperature,
         seed=resolved_seed,
+        modal_parts=modal_parts,
     )
     _trace_deterministic(result)
     try:
@@ -204,6 +206,7 @@ async def run(
             timeout=timeout,
             temperature=resolved_temperature,
             seed=resolved_seed,
+            modal_parts=modal_parts,
         )
         _trace_deterministic(result)
         try:
@@ -223,6 +226,7 @@ def run_sync(
     timeout: float | None = None,
     temperature: float | _Unset = _UNSET,
     seed: int | None | _Unset = _UNSET,
+    modal_parts: Sequence[ModalContent] = (),
 ) -> BaseModel:
     """Sync wrapper over :func:`run` via :func:`asyncio.run`."""
     return asyncio.run(
@@ -234,6 +238,7 @@ def run_sync(
             timeout=timeout,
             temperature=temperature,
             seed=seed,
+            modal_parts=modal_parts,
         )
     )
 
@@ -248,6 +253,7 @@ async def run_batch(
     timeout: float | None = None,
     temperature: float | _Unset = _UNSET,
     seed: int | None | _Unset = _UNSET,
+    modal_parts: Sequence[ModalContent] = (),
 ) -> list[BaseModel | Exception]:
     """Run extraction over many documents with per-item isolation.
 
@@ -268,6 +274,7 @@ async def run_batch(
                     timeout=timeout,
                     temperature=temperature,
                     seed=seed,
+                    modal_parts=modal_parts,
                 )
             except Exception as err:
                 return err
