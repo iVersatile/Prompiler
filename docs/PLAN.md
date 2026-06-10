@@ -119,7 +119,7 @@ both but does not conflate their keys.
   declarations, with `extra="forbid"` invariants and a `model_validator` clause.
   *Exit:* new validator unit tests pass (valid modal spec loads; malformed modal
   field raises `ValueError`); existing spec tests stay green.
-- [ ] **A2. spec_hash covers modal fields.** Confirm `spec_hash` digest changes
+- [x] **A2. spec_hash covers modal fields.** Confirm `spec_hash` digest changes
   when a modal field is added/removed (canonical-YAML folds the new keys).
   *Exit:* round-trip test asserts hash inequality across modal-vs-text spec.
 - [ ] **A3. COMPILER_PROTOCOL_VERSION decision.** Modal fields change per-adapter
