@@ -141,10 +141,10 @@ both but does not conflate their keys.
   `spec_hash`. *Exit:* second `compile_spec` on a field-equal spec returns a
   cache hit (observable via hook/metric); artefacts stay field-equal
   (determinism contract preserved).
-- [ ] **B2. Runtime result cache (FR-14).** Cache `extract` results keyed on
+- [x] **B2. Runtime result cache (FR-14).** Cache `extract` results keyed on
   `(spec_hash, backend, model, input_hash)`. *Exit:* repeated identical extract
   is served from cache (no adapter `call`); any tuple-element change misses.
-- [ ] **B3. Cache invalidation + opt-out.** Cache respects `spec_hash` /
+- [~] **B3. Cache invalidation + opt-out.** Cache respects `spec_hash` /
   protocol-version changes automatically; expose a disable switch. *Exit:* test
   shows a protocol-version bump invalidates stale entries; disable flag forces
   recompute.
