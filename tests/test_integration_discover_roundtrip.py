@@ -20,6 +20,7 @@ zero API key.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Final, TypedDict
@@ -28,7 +29,7 @@ import pytest
 import yaml
 from pydantic import BaseModel
 
-from prompiler.backends.base import ExtractResult
+from prompiler.backends.base import ExtractResult, ModalContent
 from prompiler.runtime.orchestrator import run
 from prompiler.runtime.registry import Registry, discover
 
@@ -102,6 +103,7 @@ class _SchemaDispatchScriptedAdapter:
         timeout: float | None = None,
         temperature: float = 0.0,
         seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
     ) -> ExtractResult:
         self.calls += 1
         key = frozenset(json_schema["properties"].keys())
