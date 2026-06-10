@@ -131,13 +131,13 @@ both but does not conflate their keys.
   (`src/prompiler/backends/*.py`); gate via `supports("multimodal")`. *Exit:*
   per-adapter payload tests assert correct modal block shape; unsupported
   backend raises a clear capability error, not a silent drop.
-- [ ] **A5. Orchestrator + MCP surface.** Plumb modal input through
+- [x] **A5. Orchestrator + MCP surface.** Plumb modal input through
   `runtime/orchestrator.py` and the MCP `extract` tool. *Exit:* integration test
   runs a modal extract end-to-end against the mock adapter.
 
 ### Track B — Compile-result cache (SMALL, independent)
 
-- [ ] **B1. Compile-side memoization.** Memoize `compile_spec` keyed on
+- [ ] **B1. Compile-side memoization.** _(in progress)_ Memoize `compile_spec` keyed on
   `spec_hash`. *Exit:* second `compile_spec` on a field-equal spec returns a
   cache hit (observable via hook/metric); artefacts stay field-equal
   (determinism contract preserved).
