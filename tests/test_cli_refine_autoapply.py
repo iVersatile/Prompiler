@@ -303,3 +303,57 @@ def test_auto_apply_force_overrides_dirty_refusal(
     capsys.readouterr()
     assert rc == 0
     assert prompt_path.read_text(encoding="utf-8") != before
+
+
+@pytest.mark.unit
+def test_auto_apply_unverifiable_git_tree_aborts_before_write(
+    report_path: Path,
+    prompt_path: Path,
+    fixtures_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Inside a work tree whose status can't be read, fail closed (C3 exit b).
+
+    Regression: the guard returned "clean" on a non-zero ``git status`` exit,
+    so an errored-but-real repo was treated as safe and the prompt was
+    silently overwritten. The fix must refuse the write instead.
+    """
+    propose = _make_stateful_propose()
+    monkeypatch.setattr("prompiler.cli.propose_patch_sync", propose)
+
+    real_run = subprocess.run
+
+    def _fake_run(cmd, *args, **kwargs):
+        if cmd[:2] == ["git", "rev-parse"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout="true\n", stderr="")
+        if cmd[:2] == ["git", "status"]:
+            return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="fatal\n")
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr("prompiler.cli.subprocess.run", _fake_run)
+    before = prompt_path.read_text(encoding="utf-8")
+
+    rc = main(
+        [
+            "refine",
+            str(report_path),
+            str(prompt_path),
+            "--auto-apply",
+            "--threshold",
+            "0.9",
+            "--spec",
+            str(_INVOICE_SPEC),
+            "--fixtures",
+            str(fixtures_path),
+            "--backend",
+            "mock",
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert prompt_path.read_text(encoding="utf-8") == before
+    assert propose.calls["n"] == 0
+    assert "git tree" in err
+    assert "--force" in err
