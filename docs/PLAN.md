@@ -220,11 +220,11 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
 
 ### Q2 exit criteria (phase-done, feeds §7 gate)
 
-- [ ] All C* and D* boxes checked; full suite green; coverage ≥ 80%.
-- [ ] mypy strict clean across touched modules.
-- [ ] No credentials/tokens in stdout/stderr or logged below `trace` (RULES.md §8)
+- [x] All C* and D* boxes checked; full suite green; coverage ≥ 80%.
+- [x] mypy strict clean across touched modules.
+- [x] No credentials/tokens in stdout/stderr or logged below `trace` (RULES.md §8)
   — audit `login`, keychain read, and OAuth refresh paths.
-- [ ] `--auto-apply` writes are git-tracked and reversible; no silent overwrite on
+- [x] `--auto-apply` writes are git-tracked and reversible; no silent overwrite on
   a dirty tree.
 
 ---
