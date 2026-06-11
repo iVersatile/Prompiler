@@ -22,7 +22,7 @@ import time
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import click
 import typer
@@ -598,9 +598,27 @@ def _cmd_refine(
     return 0
 
 
-def _is_dirty_git_tree(path: Path) -> bool:
+def _classify_git_tree(path: Path) -> Literal["absent", "clean", "dirty", "unknown"]:
+    """Classify ``path``'s git state so the caller can fail closed.
+
+    "absent" means no git work tree (auto-apply outside a repo is supported).
+    "unknown" means a work tree exists but its status can't be read -- the
+    caller must refuse the write rather than assume "clean".
+    """
     try:
-        proc = subprocess.run(
+        inside = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return "absent"
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        return "absent"
+    try:
+        status = subprocess.run(
             ["git", "status", "--porcelain"],
             cwd=path,
             capture_output=True,
@@ -608,10 +626,10 @@ def _is_dirty_git_tree(path: Path) -> bool:
             check=False,
         )
     except OSError:
-        return False
-    if proc.returncode != 0:
-        return False
-    return bool(proc.stdout.strip())
+        return "unknown"
+    if status.returncode != 0:
+        return "unknown"
+    return "dirty" if status.stdout.strip() else "clean"
 
 
 def _cmd_refine_auto_apply(
@@ -641,12 +659,19 @@ def _cmd_refine_auto_apply(
     if not fixtures.is_file():
         sys.stderr.write(f"prompiler refine: fixtures not found: {fixtures}\n")
         return 2
-    if not force and _is_dirty_git_tree(prompt_path.parent):
-        sys.stderr.write(
-            "prompiler refine: refusing to write to a dirty git tree; "
-            "commit/stash or pass --force\n"
-        )
-        return 2
+    if not force:
+        tree_state = _classify_git_tree(prompt_path.parent)
+        if tree_state == "dirty":
+            sys.stderr.write(
+                "prompiler refine: refusing to write to a dirty git tree; "
+                "commit/stash or pass --force\n"
+            )
+            return 2
+        if tree_state == "unknown":
+            sys.stderr.write(
+                "prompiler refine: cannot determine git tree state; commit/stash or pass --force\n"
+            )
+            return 2
 
     try:
         spec_obj = load_spec(spec)
