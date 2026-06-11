@@ -20,7 +20,6 @@ zero API key.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Final, TypedDict
@@ -29,7 +28,7 @@ import pytest
 import yaml
 from pydantic import BaseModel
 
-from prompiler.backends.base import ExtractResult, ModalContent
+from _adapters import SchemaDispatchAdapter as _SchemaDispatchScriptedAdapter
 from prompiler.runtime.orchestrator import run
 from prompiler.runtime.registry import Registry, discover
 
@@ -79,43 +78,6 @@ _RECEIPT_PAYLOAD: Final[dict[str, Any]] = {
     "merchant": "Corner Store",
     "amount": Decimal("9.99"),
 }
-
-
-class _SchemaDispatchScriptedAdapter:
-    """Scripted adapter dispatching by ``frozenset`` of schema properties.
-
-    Identical shape to the heterogeneous-batch adapter — a single instance
-    serves multiple specs without cross-talk because each spec has its own
-    FIFO queue keyed on the property set.
-    """
-
-    def __init__(self, queues: dict[frozenset[str], list[dict[str, Any]]]) -> None:
-        self._queues: dict[frozenset[str], list[dict[str, Any]]] = {
-            key: list(items) for key, items in queues.items()
-        }
-        self.calls: int = 0
-
-    async def extract(
-        self,
-        *,
-        prompt: str,
-        json_schema: dict[str, Any],
-        timeout: float | None = None,
-        temperature: float = 0.0,
-        seed: int | None = 42,
-        modal_parts: Sequence[ModalContent] = (),
-    ) -> ExtractResult:
-        self.calls += 1
-        key = frozenset(json_schema["properties"].keys())
-        return ExtractResult(
-            data=self._queues[key].pop(0), system_fingerprint=None, deterministic=True
-        )
-
-    def supports(self, feature: str) -> bool:
-        return feature == "seed"
-
-    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
-        return dict(json_schema)
 
 
 def _write_spec(dir_path: Path, filename: str, spec: _SpecDict) -> None:

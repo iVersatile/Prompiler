@@ -13,17 +13,29 @@ which calls ``uv run prompiler validate prompts/`` on every commit.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
+import os
+import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import click
 import typer
 
 from prompiler import __version__
+from prompiler.backends.credentials import (
+    _ENV_VAR_BY_BACKEND,
+    DOCS_REF,
+    CredentialError,
+    _default_token_store_path,
+    _read_token_store,
+    _write_token_store,
+)
 from prompiler.codegen import write as codegen_write
 from prompiler.eval import (
     CapturingHook,
@@ -36,9 +48,10 @@ from prompiler.eval import (
 from prompiler.mcp.server import LOOPBACK_HOST, build_server
 from prompiler.obs import configure_logging, get_logger
 from prompiler.pricing import load_pricing
-from prompiler.refine import propose_patch_sync
+from prompiler.refine import apply_patch, propose_patch_sync, run_refine_loop
 from prompiler.runtime.errors import AdapterError, EvalError
-from prompiler.runtime.registry import register_from_path
+from prompiler.runtime.orchestrator import _read_prompiler_block
+from prompiler.runtime.registry import Registry, register_from_path
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
 from prompiler.usage import (
@@ -51,6 +64,18 @@ from prompiler.usage import (
 
 _log = get_logger(__name__)
 
+_AUTO_APPLY_MAX_ITERATIONS = 3
+
+_OAUTH_LOGIN_ENV = {
+    "access_token": "PROMPILER_OAUTH_ACCESS_TOKEN",
+    "refresh_token": "PROMPILER_OAUTH_REFRESH_TOKEN",
+    "token_url": "PROMPILER_OAUTH_TOKEN_URL",
+    "client_id": "PROMPILER_OAUTH_CLIENT_ID",
+}
+_OAUTH_LOGIN_CLIENT_SECRET_ENV = "PROMPILER_OAUTH_CLIENT_SECRET"
+_OAUTH_LOGIN_EXPIRES_IN_ENV = "PROMPILER_OAUTH_EXPIRES_IN"
+_OAUTH_LOGIN_DEFAULT_EXPIRES_IN = 3600.0
+
 
 class _Backend(StrEnum):
     mock = "mock"
@@ -59,6 +84,32 @@ class _Backend(StrEnum):
 
 class _Transport(StrEnum):
     http = "http"
+
+
+_BACKEND_ENV = "PROMPILER_BACKEND"
+
+
+def _coerce_backend(value: str, *, source: str) -> str:
+    """Validate ``value`` against :class:`_Backend`; raise on unknown names."""
+    try:
+        return _Backend(value).value
+    except ValueError as exc:
+        choices = ", ".join(member.value for member in _Backend)
+        raise typer.BadParameter(
+            f"unknown backend {value!r} from {source} (choose from: {choices})"
+        ) from exc
+
+
+def _resolve_backend(backend: _Backend | None, block: dict[str, Any]) -> str:
+    """Resolve the active backend via kwarg -> env -> pyproject -> default (LL-008)."""
+    if backend is not None:
+        return backend.value
+    env = os.environ.get(_BACKEND_ENV)
+    if env is not None:
+        return _coerce_backend(env, source=_BACKEND_ENV)
+    if "backend" in block:
+        return _coerce_backend(str(block["backend"]), source="[tool.prompiler] backend")
+    return _Backend.ollama.value
 
 
 app = typer.Typer(
@@ -160,9 +211,9 @@ def eval_cmd(
         typer.Argument(help="Path to the eval fixture YAML file."),
     ],
     backend: Annotated[
-        _Backend,
+        _Backend | None,
         typer.Option(help="Backend to run the eval against (default: ollama)."),
-    ] = _Backend.ollama,
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option(help="Model name override for the backend."),
@@ -199,7 +250,7 @@ def eval_cmd(
         _cmd_eval(
             spec,
             fixtures,
-            backend=backend.value,
+            backend=_resolve_backend(backend, _read_prompiler_block()),
             model=model,
             base_url=base_url,
             json_out=json_out,
@@ -222,9 +273,9 @@ def refine(
         typer.Argument(help="Path to the prompt text file to propose a diff over."),
     ],
     backend: Annotated[
-        _Backend,
+        _Backend | None,
         typer.Option(help="Tutor backend (default: ollama)."),
-    ] = _Backend.ollama,
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option(help="Model name override for the backend."),
@@ -237,16 +288,49 @@ def refine(
         float | None,
         typer.Option(help="Per-call timeout in seconds."),
     ] = None,
+    auto_apply: Annotated[
+        bool,
+        typer.Option(
+            "--auto-apply",
+            help="Run a bounded propose->apply->eval loop instead of printing one diff.",
+        ),
+    ] = False,
+    spec: Annotated[
+        Path | None,
+        typer.Option(help="Spec YAML to evaluate against (required with --auto-apply)."),
+    ] = None,
+    fixtures: Annotated[
+        Path | None,
+        typer.Option(help="Fixtures YAML to evaluate against (required with --auto-apply)."),
+    ] = None,
+    threshold: Annotated[
+        float | None,
+        typer.Option(help="Target aggregate F1 to stop at (required with --auto-apply)."),
+    ] = None,
+    max_iterations: Annotated[
+        int,
+        typer.Option(help="Maximum propose->apply->eval rounds for --auto-apply."),
+    ] = _AUTO_APPLY_MAX_ITERATIONS,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Apply even when the git tree is dirty."),
+    ] = False,
 ) -> None:
     """Propose a prompt edit from an eval report (tutor diff to stdout)."""
     raise typer.Exit(
         _cmd_refine(
             report,
             prompt,
-            backend=backend.value,
+            backend=_resolve_backend(backend, _read_prompiler_block()),
             model=model,
             base_url=base_url,
             timeout=timeout,
+            auto_apply=auto_apply,
+            spec=spec,
+            fixtures=fixtures,
+            threshold=threshold,
+            max_iterations=max_iterations,
+            force=force,
         )
     )
 
@@ -266,6 +350,17 @@ def stats(
 ) -> None:
     """Summarise recorded backend usage over a recent time window."""
     raise typer.Exit(_cmd_stats(since=since, log=log))
+
+
+@app.command()
+def login(
+    backend: Annotated[
+        str,
+        typer.Argument(help="Backend to prime OAuth credentials for: claude, openai, or gemini."),
+    ],
+) -> None:
+    """Prime the OAuth token store for a backend from PROMPILER_OAUTH_* env vars."""
+    raise typer.Exit(_cmd_login(backend=backend))
 
 
 def _iter_spec_files(path: Path) -> list[Path]:
@@ -448,6 +543,12 @@ def _cmd_refine(
     model: str | None,
     base_url: str | None,
     timeout: float | None,
+    auto_apply: bool = False,
+    spec: Path | None = None,
+    fixtures: Path | None = None,
+    threshold: float | None = None,
+    max_iterations: int = _AUTO_APPLY_MAX_ITERATIONS,
+    force: bool = False,
 ) -> int:
     if not report_path.is_file():
         sys.stderr.write(f"prompiler refine: report not found: {report_path}\n")
@@ -463,6 +564,22 @@ def _cmd_refine(
         return 1
 
     current_prompt = prompt_path.read_text(encoding="utf-8")
+    if auto_apply:
+        return _cmd_refine_auto_apply(
+            report=report,
+            current_prompt=current_prompt,
+            prompt_path=prompt_path,
+            backend=backend,
+            model=model,
+            base_url=base_url,
+            timeout=timeout,
+            spec=spec,
+            fixtures=fixtures,
+            threshold=threshold,
+            max_iterations=max_iterations,
+            force=force,
+        )
+
     adapter, _hook, _resolved_model = _build_eval_backend(backend, model, base_url)
     try:
         diff = propose_patch_sync(
@@ -481,6 +598,126 @@ def _cmd_refine(
     return 0
 
 
+def _is_dirty_git_tree(path: Path) -> bool:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    if proc.returncode != 0:
+        return False
+    return bool(proc.stdout.strip())
+
+
+def _cmd_refine_auto_apply(
+    *,
+    report: dict[str, Any],
+    current_prompt: str,
+    prompt_path: Path,
+    backend: str,
+    model: str | None,
+    base_url: str | None,
+    timeout: float | None,
+    spec: Path | None,
+    fixtures: Path | None,
+    threshold: float | None,
+    max_iterations: int,
+    force: bool,
+) -> int:
+    if spec is None or fixtures is None:
+        sys.stderr.write("prompiler refine: --auto-apply requires --spec and --fixtures\n")
+        return 2
+    if threshold is None:
+        sys.stderr.write("prompiler refine: --auto-apply requires --threshold\n")
+        return 2
+    if not spec.is_file():
+        sys.stderr.write(f"prompiler refine: spec not found: {spec}\n")
+        return 2
+    if not fixtures.is_file():
+        sys.stderr.write(f"prompiler refine: fixtures not found: {fixtures}\n")
+        return 2
+    if not force and _is_dirty_git_tree(prompt_path.parent):
+        sys.stderr.write(
+            "prompiler refine: refusing to write to a dirty git tree; "
+            "commit/stash or pass --force\n"
+        )
+        return 2
+
+    try:
+        spec_obj = load_spec(spec)
+    except SpecLoadError as exc:
+        sys.stderr.write(f"prompiler refine: {exc}\n")
+        return 1
+    try:
+        cases = load_fixtures(fixtures)
+    except EvalError as exc:
+        sys.stderr.write(f"prompiler refine: {exc}\n")
+        return 1
+
+    base_bundle = register_from_path(spec, registry=Registry())
+    adapter, _hook, resolved_model = _build_eval_backend(backend, model, base_url)
+
+    def _propose(rep: dict[str, Any], current: str) -> str:
+        return propose_patch_sync(
+            report=rep,
+            current_prompt=current,
+            backend=adapter,  # type: ignore[arg-type]
+            timeout=timeout,
+        )
+
+    def _evaluate(current: str) -> tuple[float, dict[str, Any]]:
+        loop_registry = Registry()
+        loop_registry.register(spec_obj.name, dataclasses.replace(base_bundle, prompt=current))
+        result = run_eval(
+            spec_obj.name,
+            cases,
+            backend=adapter,
+            registry=loop_registry,
+            timeout=timeout,
+        )
+        new_report = build_report(
+            result,
+            spec=spec_obj.name,
+            spec_hash=base_bundle.spec_hash,
+            backend=backend,
+            model=resolved_model,
+            fixture_path=str(fixtures),
+        )
+        return result.metrics.f1, new_report
+
+    def _apply(current: str, diff: str) -> str:
+        new_prompt = apply_patch(current, diff)
+        prompt_path.write_text(new_prompt, encoding="utf-8")
+        return new_prompt
+
+    try:
+        outcome = run_refine_loop(
+            initial_prompt=current_prompt,
+            initial_report=report,
+            propose=_propose,
+            apply=_apply,
+            evaluate=_evaluate,
+            max_iterations=max_iterations,
+            threshold=threshold,
+        )
+    except AdapterError as exc:
+        sys.stderr.write(f"prompiler refine: {exc}\n")
+        return 1
+    finally:
+        asyncio.run(adapter.aclose())  # type: ignore[attr-defined]
+
+    for step in outcome.steps:
+        sys.stdout.write(f"iteration {step.iteration}: f1={step.f1:.3f}\n")
+    sys.stdout.write(f"stopped: {outcome.stop_reason}\n")
+    sys.stdout.write(outcome.final_prompt)
+    return 0
+
+
 def _cmd_stats(*, since: str, log: Path | None) -> int:
     try:
         window = parse_since(since)
@@ -495,6 +732,60 @@ def _cmd_stats(*, since: str, log: Path | None) -> int:
     records = read_usage(path)
     summary = summarize(records, since=window, now=datetime.now(UTC))
     sys.stdout.write(format_summary(summary) + "\n")
+    return 0
+
+
+def _cmd_login(*, backend: str) -> int:
+    known = sorted(_ENV_VAR_BY_BACKEND)
+    if backend not in _ENV_VAR_BY_BACKEND:
+        sys.stderr.write(
+            f"prompiler login: unknown backend {backend!r}; expected one of {', '.join(known)}\n"
+        )
+        return 2
+
+    values: dict[str, str] = {}
+    missing: list[str] = []
+    for field, env_name in _OAUTH_LOGIN_ENV.items():
+        value = os.environ.get(env_name)
+        if not value:
+            missing.append(env_name)
+        else:
+            values[field] = value
+    if missing:
+        sys.stderr.write(
+            f"prompiler login: missing required env var(s): {', '.join(missing)}; see {DOCS_REF}\n"
+        )
+        return 2
+
+    raw_expires = os.environ.get(_OAUTH_LOGIN_EXPIRES_IN_ENV)
+    if raw_expires:
+        try:
+            expires_in = float(raw_expires)
+        except ValueError:
+            sys.stderr.write(
+                f"prompiler login: {_OAUTH_LOGIN_EXPIRES_IN_ENV} must be a number, "
+                f"got {raw_expires!r}\n"
+            )
+            return 2
+    else:
+        expires_in = _OAUTH_LOGIN_DEFAULT_EXPIRES_IN
+
+    entry: dict[str, Any] = dict(values)
+    entry["expires_at"] = time.time() + expires_in
+    client_secret = os.environ.get(_OAUTH_LOGIN_CLIENT_SECRET_ENV)
+    if client_secret:
+        entry["client_secret"] = client_secret
+
+    path = _default_token_store_path()
+    try:
+        store = _read_token_store(path)
+        store[backend] = entry
+        _write_token_store(path, store)
+    except CredentialError as exc:
+        sys.stderr.write(f"prompiler login: {exc}\n")
+        return 1
+
+    sys.stdout.write(f"prompiler login: primed {backend} credentials at {path}\n")
     return 0
 
 

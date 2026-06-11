@@ -12,6 +12,11 @@ from prompiler.refine.differ import (
     confirm_and_apply,
     render_diff_preview,
 )
+from prompiler.refine.loop import (
+    LoopResult,
+    LoopStep,
+    run_refine_loop,
+)
 from prompiler.refine.reeval import (
     FieldDelta,
     MetricDelta,
@@ -29,6 +34,8 @@ from prompiler.refine.tutor import (
 __all__ = [
     "TUTOR_RESPONSE_SCHEMA",
     "FieldDelta",
+    "LoopResult",
+    "LoopStep",
     "MetricDelta",
     "ReevalDelta",
     "apply_patch",
@@ -39,4 +46,5 @@ __all__ = [
     "propose_patch_sync",
     "render_delta",
     "render_diff_preview",
+    "run_refine_loop",
 ]

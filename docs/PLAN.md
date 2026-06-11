@@ -159,6 +159,76 @@ both but does not conflate their keys.
 
 ---
 
+## 2.2 Q2 — Auto-apply refinement + Keychain/OAuth (expanded)
+
+**Phase tag base for §6 gate:** `main` @ `23a8b0b` (Q1 close — single-`v0.2.0`
+policy means Q1 ships no tag, so the gate base is the merge commit, not a tag).
+**Blast radius:** MEDIUM (auto-apply: new disk write + loop driver) + MEDIUM
+(credentials: keychain read + OAuth token store). Both single-owner; the two
+tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
+(`--auto-apply`), FR-10 (`KeychainProvider`, `OAuthProvider`).
+
+**Scope grounding (from codebase + 3 resolved spec gaps):**
+
+- **GAP1 — stop metric.** `run_eval` (`src/prompiler/eval/runner.py:177`) returns
+  an `EvalResult` carrying aggregate `Metrics` (precision/recall/F1). The
+  auto-apply loop reads **aggregate F1** as its stop signal. Defaults:
+  `--max-iterations 3`, no-improve ε `0.01`, `--threshold` **explicit/required**
+  (no implicit default — caller must state the target).
+- **GAP2 — apply is a new write.** `refine` today only *prints* a diff:
+  `_cmd_refine` (`cli.py:443`) calls `propose_patch_sync` (`cli.py:468`) then
+  `sys.stdout.write(diff)` (`cli.py:480`). It never mutates a file. `--auto-apply`
+  adds the **first in-place spec write**, so it is guarded by a dirty-tree refusal
+  (git is the undo layer).
+- **GAP3 — OAuth grant is async-by-nature, `resolve()` is sync.**
+  `CredentialProvider.resolve(self, backend) -> Credential`
+  (`src/prompiler/backends/credentials.py:56`) is **synchronous**. Interactive
+  OAuth grant (browser round-trip) cannot live inside it, so the grant moves to a
+  separate `prompiler login` command; `resolve()` only reads/refreshes a
+  pre-primed token store.
+
+### Track C — Auto-apply refinement (MEDIUM, FR-7)
+
+- [x] **C1. Loop driver.** Add `--auto-apply` to the `refine` command
+  (`cli.py:215` / `_cmd_refine` `cli.py:443`). Loop: apply patch → `run_eval`
+  (`eval/runner.py:177`) → read aggregate F1 → repeat until a stop condition.
+  *Exit:* a ≥2-iteration scripted loop runs end-to-end; plain `refine` (no flag)
+  prints-diff-only, behaviour unchanged.
+- [x] **C2. Stop conditions.** Metric = aggregate F1; `--threshold` explicit and
+  required; `--max-iterations` default `3`; ε `0.01` no-improvement guard halts a
+  stalled loop. *Exit:* one test each for threshold-hit, max-iterations-hit, and
+  ε-stall exit.
+- [x] **C3. Apply-to-file.** In-place spec write between rounds. **Refuse on a
+  dirty git tree** unless `--force` (git-as-undo; no silent overwrite). *Exit:*
+  file mutates across a clean-tree run; a dirty tree aborts before any write;
+  `--force` overrides the refusal.
+
+### Track D — Keychain / OAuth (MEDIUM, FR-10)
+
+- [x] **D1. KeychainProvider.** Sync `resolve` reads credentials from the OS
+  keychain, conforming to the existing `CredentialProvider` Protocol
+  (`credentials.py:56`). *Exit:* a faked keychain resolves a `Credential`; a
+  missing entry raises `CredentialError` carrying `DOCS_REF`.
+- [x] **D2. OAuthProvider + `prompiler login`.** Sync `resolve` returns a
+  cached/refreshed token from the token store; interactive grant lives in a
+  separate `prompiler login` command that primes that store. *Exit:* headless
+  `resolve` returns a primed token; an expired token triggers refresh; an
+  un-primed store raises a "run `prompiler login`" error.
+- [x] **D3. Provider selection.** Resolve which provider is active via the
+  existing precedence chain (kwarg → env → `[tool.prompiler]` pyproject). *Exit:*
+  a precedence test asserts kwarg beats env beats pyproject default.
+
+### Q2 exit criteria (phase-done, feeds §7 gate)
+
+- [x] All C* and D* boxes checked; full suite green; coverage ≥ 80%.
+- [x] mypy strict clean across touched modules.
+- [x] No credentials/tokens in stdout/stderr or logged below `trace` (RULES.md §8)
+  — audit `login`, keychain read, and OAuth refresh paths.
+- [x] `--auto-apply` writes are git-tracked and reversible; no silent overwrite on
+  a dirty tree.
+
+---
+
 ## 3. Open questions
 
 1. ~~v2 theme: depth vs breadth?~~ **RESOLVED: Mixed** (§1).

@@ -29,6 +29,7 @@ dependencies = [
 
 [project.optional-dependencies]
 adc = ["google-auth>=2.0"]
+keychain = ["keyring>=24"]
 telemetry = ["opentelemetry-api>=1.27", "opentelemetry-sdk>=1.27"]
 
 [project.scripts]
