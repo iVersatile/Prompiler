@@ -214,7 +214,7 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
   separate `prompiler login` command that primes that store. *Exit:* headless
   `resolve` returns a primed token; an expired token triggers refresh; an
   un-primed store raises a "run `prompiler login`" error.
-- [ ] **D3. Provider selection.** Resolve which provider is active via the
+- [x] **D3. Provider selection.** Resolve which provider is active via the
   existing precedence chain (kwarg → env → `[tool.prompiler]` pyproject). *Exit:*
   a precedence test asserts kwarg beats env beats pyproject default.
 
