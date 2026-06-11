@@ -7,6 +7,7 @@ end-to-end; plain ``refine`` (no flag) prints-diff-only, behaviour unchanged.
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -171,3 +172,134 @@ def test_plain_refine_ignores_loop_and_emits_diff(
     out = capsys.readouterr().out
     assert rc == 0
     assert out == diff
+
+
+def _git_init_commit(repo: Path) -> None:
+    """Init a git repo in ``repo`` and commit everything in it.
+
+    Inline ``-c user.*`` keeps this off the global git identity (and the
+    GH007 noreply-email constraint that only matters for real pushes).
+    """
+    ident = ["-c", "user.name=t", "-c", "user.email=t@example.com"]
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", *ident, "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", *ident, "commit", "-q", "-m", "init"], cwd=repo, check=True)
+
+
+@pytest.mark.unit
+def test_auto_apply_clean_tree_mutates_prompt_file(
+    report_path: Path,
+    prompt_path: Path,
+    fixtures_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Clean-tree run writes the refined prompt back to disk (C3 exit a)."""
+    propose = _make_stateful_propose()
+    monkeypatch.setattr("prompiler.cli.propose_patch_sync", propose)
+    _git_init_commit(tmp_path)
+    before = prompt_path.read_text(encoding="utf-8")
+
+    rc = main(
+        [
+            "refine",
+            str(report_path),
+            str(prompt_path),
+            "--auto-apply",
+            "--threshold",
+            "0.9",
+            "--spec",
+            str(_INVOICE_SPEC),
+            "--fixtures",
+            str(fixtures_path),
+            "--backend",
+            "mock",
+        ]
+    )
+
+    capsys.readouterr()
+    after = prompt_path.read_text(encoding="utf-8")
+    assert rc == 0
+    assert after != before
+    assert "revision" in after
+
+
+@pytest.mark.unit
+def test_auto_apply_dirty_tree_aborts_before_write(
+    report_path: Path,
+    prompt_path: Path,
+    fixtures_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Dirty tree without ``--force`` aborts before any write (C3 exit b)."""
+    propose = _make_stateful_propose()
+    monkeypatch.setattr("prompiler.cli.propose_patch_sync", propose)
+    _git_init_commit(tmp_path)
+    (tmp_path / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+    before = prompt_path.read_text(encoding="utf-8")
+
+    rc = main(
+        [
+            "refine",
+            str(report_path),
+            str(prompt_path),
+            "--auto-apply",
+            "--threshold",
+            "0.9",
+            "--spec",
+            str(_INVOICE_SPEC),
+            "--fixtures",
+            str(fixtures_path),
+            "--backend",
+            "mock",
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert prompt_path.read_text(encoding="utf-8") == before
+    assert propose.calls["n"] == 0
+    assert "dirty" in err
+    assert "--force" in err
+
+
+@pytest.mark.unit
+def test_auto_apply_force_overrides_dirty_refusal(
+    report_path: Path,
+    prompt_path: Path,
+    fixtures_path: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``--force`` overrides the dirty-tree refusal and writes (C3 exit c)."""
+    propose = _make_stateful_propose()
+    monkeypatch.setattr("prompiler.cli.propose_patch_sync", propose)
+    _git_init_commit(tmp_path)
+    (tmp_path / "dirty.txt").write_text("uncommitted\n", encoding="utf-8")
+    before = prompt_path.read_text(encoding="utf-8")
+
+    rc = main(
+        [
+            "refine",
+            str(report_path),
+            str(prompt_path),
+            "--auto-apply",
+            "--threshold",
+            "0.9",
+            "--spec",
+            str(_INVOICE_SPEC),
+            "--fixtures",
+            str(fixtures_path),
+            "--backend",
+            "mock",
+            "--force",
+        ]
+    )
+
+    capsys.readouterr()
+    assert rc == 0
+    assert prompt_path.read_text(encoding="utf-8") != before

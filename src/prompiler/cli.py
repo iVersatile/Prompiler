@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import subprocess
 import sys
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -263,6 +264,10 @@ def refine(
         int,
         typer.Option(help="Maximum propose->apply->eval rounds for --auto-apply."),
     ] = _AUTO_APPLY_MAX_ITERATIONS,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Apply even when the git tree is dirty."),
+    ] = False,
 ) -> None:
     """Propose a prompt edit from an eval report (tutor diff to stdout)."""
     raise typer.Exit(
@@ -278,6 +283,7 @@ def refine(
             fixtures=fixtures,
             threshold=threshold,
             max_iterations=max_iterations,
+            force=force,
         )
     )
 
@@ -484,6 +490,7 @@ def _cmd_refine(
     fixtures: Path | None = None,
     threshold: float | None = None,
     max_iterations: int = _AUTO_APPLY_MAX_ITERATIONS,
+    force: bool = False,
 ) -> int:
     if not report_path.is_file():
         sys.stderr.write(f"prompiler refine: report not found: {report_path}\n")
@@ -503,6 +510,7 @@ def _cmd_refine(
         return _cmd_refine_auto_apply(
             report=report,
             current_prompt=current_prompt,
+            prompt_path=prompt_path,
             backend=backend,
             model=model,
             base_url=base_url,
@@ -511,6 +519,7 @@ def _cmd_refine(
             fixtures=fixtures,
             threshold=threshold,
             max_iterations=max_iterations,
+            force=force,
         )
 
     adapter, _hook, _resolved_model = _build_eval_backend(backend, model, base_url)
@@ -531,10 +540,27 @@ def _cmd_refine(
     return 0
 
 
+def _is_dirty_git_tree(path: Path) -> bool:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    if proc.returncode != 0:
+        return False
+    return bool(proc.stdout.strip())
+
+
 def _cmd_refine_auto_apply(
     *,
     report: dict[str, Any],
     current_prompt: str,
+    prompt_path: Path,
     backend: str,
     model: str | None,
     base_url: str | None,
@@ -543,6 +569,7 @@ def _cmd_refine_auto_apply(
     fixtures: Path | None,
     threshold: float | None,
     max_iterations: int,
+    force: bool,
 ) -> int:
     if spec is None or fixtures is None:
         sys.stderr.write("prompiler refine: --auto-apply requires --spec and --fixtures\n")
@@ -555,6 +582,12 @@ def _cmd_refine_auto_apply(
         return 2
     if not fixtures.is_file():
         sys.stderr.write(f"prompiler refine: fixtures not found: {fixtures}\n")
+        return 2
+    if not force and _is_dirty_git_tree(prompt_path.parent):
+        sys.stderr.write(
+            "prompiler refine: refusing to write to a dirty git tree; "
+            "commit/stash or pass --force\n"
+        )
         return 2
 
     try:
@@ -599,12 +632,17 @@ def _cmd_refine_auto_apply(
         )
         return result.metrics.f1, new_report
 
+    def _apply(current: str, diff: str) -> str:
+        new_prompt = apply_patch(current, diff)
+        prompt_path.write_text(new_prompt, encoding="utf-8")
+        return new_prompt
+
     try:
         outcome = run_refine_loop(
             initial_prompt=current_prompt,
             initial_report=report,
             propose=_propose,
-            apply=apply_patch,
+            apply=_apply,
             evaluate=_evaluate,
             max_iterations=max_iterations,
             threshold=threshold,
