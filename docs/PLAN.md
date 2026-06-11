@@ -205,7 +205,7 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
 
 ### Track D — Keychain / OAuth (MEDIUM, FR-10)
 
-- [ ] **D1. KeychainProvider.** Sync `resolve` reads credentials from the OS
+- [x] **D1. KeychainProvider.** Sync `resolve` reads credentials from the OS
   keychain, conforming to the existing `CredentialProvider` Protocol
   (`credentials.py:56`). *Exit:* a faked keychain resolves a `Credential`; a
   missing entry raises `CredentialError` carrying `DOCS_REF`.
