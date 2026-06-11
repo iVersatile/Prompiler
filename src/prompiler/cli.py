@@ -15,8 +15,10 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import json
+import os
 import subprocess
 import sys
+import time
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -26,6 +28,14 @@ import click
 import typer
 
 from prompiler import __version__
+from prompiler.backends.credentials import (
+    _ENV_VAR_BY_BACKEND,
+    DOCS_REF,
+    CredentialError,
+    _default_token_store_path,
+    _read_token_store,
+    _write_token_store,
+)
 from prompiler.codegen import write as codegen_write
 from prompiler.eval import (
     CapturingHook,
@@ -54,6 +64,16 @@ from prompiler.usage import (
 _log = get_logger(__name__)
 
 _AUTO_APPLY_MAX_ITERATIONS = 3
+
+_OAUTH_LOGIN_ENV = {
+    "access_token": "PROMPILER_OAUTH_ACCESS_TOKEN",
+    "refresh_token": "PROMPILER_OAUTH_REFRESH_TOKEN",
+    "token_url": "PROMPILER_OAUTH_TOKEN_URL",
+    "client_id": "PROMPILER_OAUTH_CLIENT_ID",
+}
+_OAUTH_LOGIN_CLIENT_SECRET_ENV = "PROMPILER_OAUTH_CLIENT_SECRET"
+_OAUTH_LOGIN_EXPIRES_IN_ENV = "PROMPILER_OAUTH_EXPIRES_IN"
+_OAUTH_LOGIN_DEFAULT_EXPIRES_IN = 3600.0
 
 
 class _Backend(StrEnum):
@@ -303,6 +323,17 @@ def stats(
 ) -> None:
     """Summarise recorded backend usage over a recent time window."""
     raise typer.Exit(_cmd_stats(since=since, log=log))
+
+
+@app.command()
+def login(
+    backend: Annotated[
+        str,
+        typer.Argument(help="Backend to prime OAuth credentials for: claude, openai, or gemini."),
+    ],
+) -> None:
+    """Prime the OAuth token store for a backend from PROMPILER_OAUTH_* env vars."""
+    raise typer.Exit(_cmd_login(backend=backend))
 
 
 def _iter_spec_files(path: Path) -> list[Path]:
@@ -674,6 +705,60 @@ def _cmd_stats(*, since: str, log: Path | None) -> int:
     records = read_usage(path)
     summary = summarize(records, since=window, now=datetime.now(UTC))
     sys.stdout.write(format_summary(summary) + "\n")
+    return 0
+
+
+def _cmd_login(*, backend: str) -> int:
+    known = sorted(_ENV_VAR_BY_BACKEND)
+    if backend not in _ENV_VAR_BY_BACKEND:
+        sys.stderr.write(
+            f"prompiler login: unknown backend {backend!r}; expected one of {', '.join(known)}\n"
+        )
+        return 2
+
+    values: dict[str, str] = {}
+    missing: list[str] = []
+    for field, env_name in _OAUTH_LOGIN_ENV.items():
+        value = os.environ.get(env_name)
+        if not value:
+            missing.append(env_name)
+        else:
+            values[field] = value
+    if missing:
+        sys.stderr.write(
+            f"prompiler login: missing required env var(s): {', '.join(missing)}; see {DOCS_REF}\n"
+        )
+        return 2
+
+    raw_expires = os.environ.get(_OAUTH_LOGIN_EXPIRES_IN_ENV)
+    if raw_expires:
+        try:
+            expires_in = float(raw_expires)
+        except ValueError:
+            sys.stderr.write(
+                f"prompiler login: {_OAUTH_LOGIN_EXPIRES_IN_ENV} must be a number, "
+                f"got {raw_expires!r}\n"
+            )
+            return 2
+    else:
+        expires_in = _OAUTH_LOGIN_DEFAULT_EXPIRES_IN
+
+    entry: dict[str, Any] = dict(values)
+    entry["expires_at"] = time.time() + expires_in
+    client_secret = os.environ.get(_OAUTH_LOGIN_CLIENT_SECRET_ENV)
+    if client_secret:
+        entry["client_secret"] = client_secret
+
+    path = _default_token_store_path()
+    try:
+        store = _read_token_store(path)
+        store[backend] = entry
+        _write_token_store(path, store)
+    except CredentialError as exc:
+        sys.stderr.write(f"prompiler login: {exc}\n")
+        return 1
+
+    sys.stdout.write(f"prompiler login: primed {backend} credentials at {path}\n")
     return 0
 
 

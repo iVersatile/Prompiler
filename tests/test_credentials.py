@@ -14,8 +14,10 @@ Covers:
 
 from __future__ import annotations
 
+import json
 import sys
 import types
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -29,6 +31,7 @@ from prompiler.backends import (
     GeminiAdapter,
     GoogleADCProvider,
     KeychainProvider,
+    OAuthProvider,
     OpenAIAdapter,
 )
 from prompiler.backends.credentials import DOCS_REF
@@ -374,3 +377,143 @@ def test_gemini_adapter_client_bypasses_provider() -> None:
     transport = httpx.MockTransport(lambda req: httpx.Response(200, json={}))
     client = httpx.AsyncClient(transport=transport)
     GeminiAdapter(client=client, credentials=_ExplodingProvider())
+
+
+# OAuthProvider --------------------------------------------------------
+def _write_oauth_store(
+    path: Path,
+    *,
+    backend: str = "claude",
+    access_token: str = "cached-tok",
+    refresh_token: str = "refresh-tok",
+    token_url: str = "https://auth.example/token",
+    client_id: str = "client-abc",
+    client_secret: str | None = None,
+    expires_at: float = 0.0,
+) -> None:
+    entry: dict[str, Any] = {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_url": token_url,
+        "client_id": client_id,
+        "expires_at": expires_at,
+    }
+    if client_secret is not None:
+        entry["client_secret"] = client_secret
+    path.write_text(json.dumps({backend: entry}), encoding="utf-8")
+
+
+def _exploding_transport() -> httpx.MockTransport:
+    def _handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError("token endpoint must not be called on this path")
+
+    return httpx.MockTransport(_handler)
+
+
+@pytest.mark.unit
+def test_oauth_cached_token_skips_refresh(tmp_path: Path) -> None:
+    store = tmp_path / "oauth_tokens.json"
+    _write_oauth_store(store, access_token="cached-tok", expires_at=1000.0)
+    client = httpx.Client(transport=_exploding_transport())
+    provider = OAuthProvider(store_path=store, client=client, now=lambda: 500.0)
+    cred = provider.resolve("claude")
+    assert cred == Credential(headers={"authorization": "Bearer cached-tok"})
+
+
+@pytest.mark.unit
+def test_oauth_expired_token_triggers_refresh(tmp_path: Path) -> None:
+    store = tmp_path / "oauth_tokens.json"
+    _write_oauth_store(
+        store,
+        access_token="stale-tok",
+        refresh_token="refresh-tok",
+        token_url="https://auth.example/token",
+        client_id="client-abc",
+        expires_at=1000.0,
+    )
+    recorder: dict[str, Any] = {}
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        recorder["url"] = str(request.url)
+        recorder["body"] = request.content.decode("utf-8")
+        return httpx.Response(200, json={"access_token": "new-tok", "expires_in": 3600})
+
+    client = httpx.Client(transport=httpx.MockTransport(_handler))
+    provider = OAuthProvider(store_path=store, client=client, now=lambda: 5000.0)
+    cred = provider.resolve("claude")
+    assert cred == Credential(headers={"authorization": "Bearer new-tok"})
+    assert recorder["url"] == "https://auth.example/token"
+    assert "grant_type=refresh_token" in recorder["body"]
+    assert "refresh_token=refresh-tok" in recorder["body"]
+    assert "client_id=client-abc" in recorder["body"]
+    persisted = json.loads(store.read_text(encoding="utf-8"))["claude"]
+    assert persisted["access_token"] == "new-tok"
+    assert persisted["expires_at"] == 5000.0 + 3600
+    assert (store.stat().st_mode & 0o777) == 0o600
+
+
+@pytest.mark.unit
+def test_oauth_unprimed_store_raises(tmp_path: Path) -> None:
+    store = tmp_path / "missing.json"
+    provider = OAuthProvider(
+        store_path=store,
+        client=httpx.Client(transport=_exploding_transport()),
+        now=lambda: 0.0,
+    )
+    with pytest.raises(CredentialError) as excinfo:
+        provider.resolve("claude")
+    message = str(excinfo.value)
+    assert "prompiler login" in message
+    assert DOCS_REF in message
+    assert "\n" not in message
+
+
+@pytest.mark.unit
+def test_oauth_missing_backend_entry_raises(tmp_path: Path) -> None:
+    store = tmp_path / "oauth_tokens.json"
+    _write_oauth_store(store, backend="openai")
+    provider = OAuthProvider(
+        store_path=store,
+        client=httpx.Client(transport=_exploding_transport()),
+        now=lambda: 0.0,
+    )
+    with pytest.raises(CredentialError) as excinfo:
+        provider.resolve("claude")
+    message = str(excinfo.value)
+    assert "prompiler login" in message
+    assert DOCS_REF in message
+    assert "\n" not in message
+
+
+@pytest.mark.unit
+def test_oauth_refresh_http_error_raises(tmp_path: Path) -> None:
+    store = tmp_path / "oauth_tokens.json"
+    _write_oauth_store(store, expires_at=1000.0)
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"error": "invalid_grant"})
+
+    client = httpx.Client(transport=httpx.MockTransport(_handler))
+    provider = OAuthProvider(store_path=store, client=client, now=lambda: 5000.0)
+    with pytest.raises(CredentialError) as excinfo:
+        provider.resolve("claude")
+    message = str(excinfo.value)
+    assert DOCS_REF in message
+    assert "\n" not in message
+
+
+@pytest.mark.unit
+def test_oauth_refresh_missing_access_token_raises(tmp_path: Path) -> None:
+    store = tmp_path / "oauth_tokens.json"
+    _write_oauth_store(store, expires_at=1000.0)
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"expires_in": 3600})
+
+    client = httpx.Client(transport=httpx.MockTransport(_handler))
+    provider = OAuthProvider(store_path=store, client=client, now=lambda: 5000.0)
+    with pytest.raises(CredentialError) as excinfo:
+        provider.resolve("claude")
+    message = str(excinfo.value)
+    assert DOCS_REF in message
+    assert "\n" not in message

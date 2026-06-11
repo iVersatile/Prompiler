@@ -22,6 +22,7 @@ from prompiler.backends.credentials import (
     EnvVarProvider,
     GoogleADCProvider,
     KeychainProvider,
+    OAuthProvider,
 )
 from prompiler.backends.gemini import GeminiAdapter
 from prompiler.backends.observability import (
@@ -51,6 +52,7 @@ __all__ = [
     "GoogleADCProvider",
     "KeychainProvider",
     "ModalContent",
+    "OAuthProvider",
     "ObservabilityHook",
     "OllamaAdapter",
     "OpenAIAdapter",
