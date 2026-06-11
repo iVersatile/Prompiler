@@ -194,7 +194,7 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
   (`eval/runner.py:177`) → read aggregate F1 → repeat until a stop condition.
   *Exit:* a ≥2-iteration scripted loop runs end-to-end; plain `refine` (no flag)
   prints-diff-only, behaviour unchanged.
-- [ ] **C2. Stop conditions.** Metric = aggregate F1; `--threshold` explicit and
+- [x] **C2. Stop conditions.** Metric = aggregate F1; `--threshold` explicit and
   required; `--max-iterations` default `3`; ε `0.01` no-improvement guard halts a
   stalled loop. *Exit:* one test each for threshold-hit, max-iterations-hit, and
   ε-stall exit.
