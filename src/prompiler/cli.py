@@ -13,12 +13,13 @@ which calls ``uv run prompiler validate prompts/`` on every commit.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import sys
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import click
 import typer
@@ -36,9 +37,9 @@ from prompiler.eval import (
 from prompiler.mcp.server import LOOPBACK_HOST, build_server
 from prompiler.obs import configure_logging, get_logger
 from prompiler.pricing import load_pricing
-from prompiler.refine import propose_patch_sync
+from prompiler.refine import apply_patch, propose_patch_sync, run_refine_loop
 from prompiler.runtime.errors import AdapterError, EvalError
-from prompiler.runtime.registry import register_from_path
+from prompiler.runtime.registry import Registry, register_from_path
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
 from prompiler.usage import (
@@ -50,6 +51,8 @@ from prompiler.usage import (
 )
 
 _log = get_logger(__name__)
+
+_AUTO_APPLY_MAX_ITERATIONS = 3
 
 
 class _Backend(StrEnum):
@@ -237,6 +240,21 @@ def refine(
         float | None,
         typer.Option(help="Per-call timeout in seconds."),
     ] = None,
+    auto_apply: Annotated[
+        bool,
+        typer.Option(
+            "--auto-apply",
+            help="Run a bounded propose->apply->eval loop instead of printing one diff.",
+        ),
+    ] = False,
+    spec: Annotated[
+        Path | None,
+        typer.Option(help="Spec YAML to evaluate against (required with --auto-apply)."),
+    ] = None,
+    fixtures: Annotated[
+        Path | None,
+        typer.Option(help="Fixtures YAML to evaluate against (required with --auto-apply)."),
+    ] = None,
 ) -> None:
     """Propose a prompt edit from an eval report (tutor diff to stdout)."""
     raise typer.Exit(
@@ -247,6 +265,9 @@ def refine(
             model=model,
             base_url=base_url,
             timeout=timeout,
+            auto_apply=auto_apply,
+            spec=spec,
+            fixtures=fixtures,
         )
     )
 
@@ -448,6 +469,9 @@ def _cmd_refine(
     model: str | None,
     base_url: str | None,
     timeout: float | None,
+    auto_apply: bool = False,
+    spec: Path | None = None,
+    fixtures: Path | None = None,
 ) -> int:
     if not report_path.is_file():
         sys.stderr.write(f"prompiler refine: report not found: {report_path}\n")
@@ -463,6 +487,18 @@ def _cmd_refine(
         return 1
 
     current_prompt = prompt_path.read_text(encoding="utf-8")
+    if auto_apply:
+        return _cmd_refine_auto_apply(
+            report=report,
+            current_prompt=current_prompt,
+            backend=backend,
+            model=model,
+            base_url=base_url,
+            timeout=timeout,
+            spec=spec,
+            fixtures=fixtures,
+        )
+
     adapter, _hook, _resolved_model = _build_eval_backend(backend, model, base_url)
     try:
         diff = propose_patch_sync(
@@ -478,6 +514,90 @@ def _cmd_refine(
         asyncio.run(adapter.aclose())  # type: ignore[attr-defined]
 
     sys.stdout.write(diff)
+    return 0
+
+
+def _cmd_refine_auto_apply(
+    *,
+    report: dict[str, Any],
+    current_prompt: str,
+    backend: str,
+    model: str | None,
+    base_url: str | None,
+    timeout: float | None,
+    spec: Path | None,
+    fixtures: Path | None,
+) -> int:
+    if spec is None or fixtures is None:
+        sys.stderr.write("prompiler refine: --auto-apply requires --spec and --fixtures\n")
+        return 2
+    if not spec.is_file():
+        sys.stderr.write(f"prompiler refine: spec not found: {spec}\n")
+        return 2
+    if not fixtures.is_file():
+        sys.stderr.write(f"prompiler refine: fixtures not found: {fixtures}\n")
+        return 2
+
+    try:
+        spec_obj = load_spec(spec)
+    except SpecLoadError as exc:
+        sys.stderr.write(f"prompiler refine: {exc}\n")
+        return 1
+    try:
+        cases = load_fixtures(fixtures)
+    except EvalError as exc:
+        sys.stderr.write(f"prompiler refine: {exc}\n")
+        return 1
+
+    base_bundle = register_from_path(spec, registry=Registry())
+    adapter, _hook, resolved_model = _build_eval_backend(backend, model, base_url)
+
+    def _propose(rep: dict[str, Any], current: str) -> str:
+        return propose_patch_sync(
+            report=rep,
+            current_prompt=current,
+            backend=adapter,  # type: ignore[arg-type]
+            timeout=timeout,
+        )
+
+    def _evaluate(current: str) -> tuple[float, dict[str, Any]]:
+        loop_registry = Registry()
+        loop_registry.register(spec_obj.name, dataclasses.replace(base_bundle, prompt=current))
+        result = run_eval(
+            spec_obj.name,
+            cases,
+            backend=adapter,
+            registry=loop_registry,
+            timeout=timeout,
+        )
+        new_report = build_report(
+            result,
+            spec=spec_obj.name,
+            spec_hash=base_bundle.spec_hash,
+            backend=backend,
+            model=resolved_model,
+            fixture_path=str(fixtures),
+        )
+        return result.metrics.f1, new_report
+
+    try:
+        outcome = run_refine_loop(
+            initial_prompt=current_prompt,
+            initial_report=report,
+            propose=_propose,
+            apply=apply_patch,
+            evaluate=_evaluate,
+            max_iterations=_AUTO_APPLY_MAX_ITERATIONS,
+        )
+    except AdapterError as exc:
+        sys.stderr.write(f"prompiler refine: {exc}\n")
+        return 1
+    finally:
+        asyncio.run(adapter.aclose())  # type: ignore[attr-defined]
+
+    for step in outcome.steps:
+        sys.stdout.write(f"iteration {step.iteration}: f1={step.f1:.3f}\n")
+    sys.stdout.write(outcome.final_prompt)
     return 0
 
 

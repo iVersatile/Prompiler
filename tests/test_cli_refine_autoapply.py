@@ -1,0 +1,140 @@
+"""C1 auto-apply CLI tests: ``refine --auto-apply`` runs a bounded loop.
+
+Exit criterion (docs/PLAN.md §2.2, C1): a >=2-iteration scripted loop runs
+end-to-end; plain ``refine`` (no flag) prints-diff-only, behaviour unchanged.
+"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from prompiler.cli import main
+
+_INVOICE_SPEC = Path(__file__).resolve().parents[1] / "examples" / "invoice.yaml"
+
+_FIXTURES_YAML = """\
+- name: acme
+  input: "Invoice from Acme Corp, total 100.00"
+  expected:
+    vendor_name: "Acme Corp"
+    total_amount: "100.00"
+- name: globex
+  input: "Invoice from Globex, total 250.50"
+  expected:
+    vendor_name: "Globex"
+    total_amount: "250.50"
+"""
+
+
+def _write_report(path: Path) -> None:
+    payload = {
+        "spec": "invoice",
+        "spec_hash": "deadbeef",
+        "backend": "mock",
+        "model": "mock",
+        "aggregate": {"precision": 0.5, "recall": 0.5, "f1": 0.5},
+        "per_field": {
+            "vendor_name": {"p": 0.5, "r": 0.5, "f1": 0.5},
+            "total_amount": {"p": 0.5, "r": 0.5, "f1": 0.5},
+        },
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+@pytest.fixture
+def report_path(tmp_path: Path) -> Path:
+    path = tmp_path / "eval-report.json"
+    _write_report(path)
+    return path
+
+
+@pytest.fixture
+def prompt_path(tmp_path: Path) -> Path:
+    path = tmp_path / "prompt.txt"
+    path.write_text(
+        "Extract vendor_name and total_amount from the invoice.\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def fixtures_path(tmp_path: Path) -> Path:
+    path = tmp_path / "fixtures.yaml"
+    path.write_text(_FIXTURES_YAML, encoding="utf-8")
+    return path
+
+
+def _make_stateful_propose():
+    """Stateful stub: emits a fresh context-matching diff each call.
+
+    A constant diff would fail on iteration 2 because ``apply_patch`` context
+    no longer matches after iteration 1 rewrites the prompt's first line.
+    """
+    calls = {"n": 0}
+
+    def _propose(**kwargs):
+        calls["n"] += 1
+        current = str(kwargs["current_prompt"])
+        first_line = current.splitlines()[0]
+        new_line = f"Extract every field precisely (revision {calls['n']})."
+        return f"--- prompt.txt\n+++ prompt.txt\n@@ -1 +1 @@\n-{first_line}\n+{new_line}\n"
+
+    _propose.calls = calls
+    return _propose
+
+
+@pytest.mark.unit
+def test_auto_apply_runs_multi_iteration_loop(
+    report_path: Path,
+    prompt_path: Path,
+    fixtures_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    propose = _make_stateful_propose()
+    monkeypatch.setattr("prompiler.cli.propose_patch_sync", propose)
+
+    rc = main(
+        [
+            "refine",
+            str(report_path),
+            str(prompt_path),
+            "--auto-apply",
+            "--spec",
+            str(_INVOICE_SPEC),
+            "--fixtures",
+            str(fixtures_path),
+            "--backend",
+            "mock",
+        ]
+    )
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert propose.calls["n"] == 3
+    assert "iteration 3" in out
+    assert "revision 3" in out
+
+
+@pytest.mark.unit
+def test_plain_refine_ignores_loop_and_emits_diff(
+    report_path: Path,
+    prompt_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    diff = "--- prompt.txt\n+++ prompt.txt\n@@ -1 +1 @@\n-old\n+new\n"
+    monkeypatch.setattr(
+        "prompiler.cli.propose_patch_sync",
+        lambda **kwargs: diff,
+    )
+
+    rc = main(["refine", str(report_path), str(prompt_path), "--backend", "mock"])
+
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert out == diff
