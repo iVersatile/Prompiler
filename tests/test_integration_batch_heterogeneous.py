@@ -24,13 +24,12 @@ Adapter is fully scripted; no network, no API key.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
 from typing import Any, Final
 
 import pytest
 from pydantic import BaseModel
 
-from prompiler.backends.base import ExtractResult, ModalContent
+from _adapters import SchemaDispatchAdapter as _SchemaDispatchScriptedAdapter
 from prompiler.compiler import compile_spec
 from prompiler.runtime.errors import ExtractionFailed
 from prompiler.runtime.orchestrator import run
@@ -73,47 +72,6 @@ _TICKET_PAYLOAD: Final[dict[str, Any]] = {
 _TICKET_INVALID_MISSING_PRIORITY: Final[dict[str, Any]] = {
     "ticket_id": "SUP-4821",
 }
-
-
-class _SchemaDispatchScriptedAdapter:
-    """Scripted adapter that dispatches by the schema's property set.
-
-    A single adapter instance serves multiple distinct specs in one batch.
-    Per-spec FIFO queues isolate state: popping for spec A never advances
-    spec B's cursor. Queues accept payload dicts *or* ``Exception`` instances
-    (the latter are raised on pop) so retry/failure scenarios can be wired
-    per-spec without cross-talk.
-    """
-
-    def __init__(self, queues: dict[frozenset[str], list[dict[str, Any] | Exception]]) -> None:
-        self._queues: dict[frozenset[str], list[dict[str, Any] | Exception]] = {
-            key: list(items) for key, items in queues.items()
-        }
-        self.calls: int = 0
-
-    async def extract(
-        self,
-        *,
-        prompt: str,
-        json_schema: dict[str, Any],
-        timeout: float | None = None,
-        temperature: float = 0.0,
-        seed: int | None = 42,
-        modal_parts: Sequence[ModalContent] = (),
-    ) -> ExtractResult:
-        self.calls += 1
-        key = frozenset(json_schema["properties"].keys())
-        queue = self._queues[key]
-        head = queue.pop(0)
-        if isinstance(head, Exception):
-            raise head
-        return ExtractResult(data=head, system_fingerprint=None, deterministic=True)
-
-    def supports(self, feature: str) -> bool:
-        return feature == "seed"
-
-    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
-        return dict(json_schema)
 
 
 def _register_both() -> Registry:

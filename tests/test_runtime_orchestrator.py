@@ -21,6 +21,7 @@ default pytest configuration.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from collections.abc import Sequence
 from typing import Any
 
@@ -388,6 +389,34 @@ def test_result_cache_misses_on_model_change() -> None:
 
     assert second_adapter.calls == 1
     assert result.title == "two"  # type: ignore[attr-defined]
+
+
+@pytest.mark.unit
+def test_result_cache_misses_on_prompt_change_at_constant_spec_hash() -> None:
+    """B2: the cache key hashes ``bundle.prompt``, not only ``spec_hash``.
+
+    The refine loop patches the prompt via ``dataclasses.replace`` while the
+    spec — and therefore ``spec_hash`` — stays constant. Without the
+    ``prompt_hash`` dimension the second run would serve a stale, pre-refine
+    extraction. Holding spec/backend/text fixed and varying only the prompt
+    must MISS.
+    """
+    spec = _build_simple_spec("doc")
+    bundle = compile_spec(spec)
+    adapter = _ScriptedAdapter([{"title": "one"}, {"title": "two"}])
+
+    reg_a = Registry()
+    reg_a.register("doc", bundle)
+    asyncio.run(run("doc", "body", backend=adapter, registry=reg_a))
+
+    patched = dataclasses.replace(bundle, prompt=bundle.prompt + "\n\n## Refinement\nBe precise.")
+    reg_b = Registry()
+    reg_b.register("doc", patched)
+    second = asyncio.run(run("doc", "body", backend=adapter, registry=reg_b))
+
+    assert patched.spec_hash == bundle.spec_hash
+    assert adapter.calls == 2
+    assert second.title == "two"  # type: ignore[attr-defined]
 
 
 @pytest.mark.unit

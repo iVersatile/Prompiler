@@ -20,14 +20,13 @@ Adapter is fully scripted; no network, no API key.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Sequence
 from decimal import Decimal
 from typing import Any, Final
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from prompiler.backends.base import ExtractResult, ModalContent
+from _adapters import ScriptedAdapter as _ScriptedAdapter
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.orchestrator import run
@@ -98,38 +97,6 @@ _VALID_INVOICE_PAYLOAD: Final[dict[str, Any]] = {
         },
     ],
 }
-
-
-class _ScriptedAdapter:
-    def __init__(self, script: list[dict[str, Any] | Exception]) -> None:
-        self._script: list[dict[str, Any] | Exception] = list(script)
-        self.calls: int = 0
-
-    async def extract(
-        self,
-        *,
-        prompt: str,
-        json_schema: dict[str, Any],
-        timeout: float | None = None,
-        temperature: float = 0.0,
-        seed: int | None = 42,
-        modal_parts: Sequence[ModalContent] = (),
-    ) -> ExtractResult:
-        self.calls += 1
-        assert self._script, (
-            f"_ScriptedAdapter exhausted on call {self.calls}; "
-            "test scripted fewer responses than orchestrator requested"
-        )
-        head = self._script.pop(0)
-        if isinstance(head, Exception):
-            raise head
-        return ExtractResult(data=head, system_fingerprint=None, deterministic=True)
-
-    def supports(self, feature: str) -> bool:
-        return feature == "seed"
-
-    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
-        return dict(json_schema)
 
 
 def _register() -> Registry:
