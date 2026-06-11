@@ -209,7 +209,7 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
   keychain, conforming to the existing `CredentialProvider` Protocol
   (`credentials.py:56`). *Exit:* a faked keychain resolves a `Credential`; a
   missing entry raises `CredentialError` carrying `DOCS_REF`.
-- [ ] **D2. OAuthProvider + `prompiler login`.** Sync `resolve` returns a
+- [x] **D2. OAuthProvider + `prompiler login`.** Sync `resolve` returns a
   cached/refreshed token from the token store; interactive grant lives in a
   separate `prompiler login` command that primes that store. *Exit:* headless
   `resolve` returns a primed token; an expired token triggers refresh; an
