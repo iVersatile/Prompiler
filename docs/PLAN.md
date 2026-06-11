@@ -189,7 +189,7 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
 
 ### Track C — Auto-apply refinement (MEDIUM, FR-7)
 
-- [ ] **C1. Loop driver.** Add `--auto-apply` to the `refine` command
+- [x] **C1. Loop driver.** Add `--auto-apply` to the `refine` command
   (`cli.py:215` / `_cmd_refine` `cli.py:443`). Loop: apply patch → `run_eval`
   (`eval/runner.py:177`) → read aggregate F1 → repeat until a stop condition.
   *Exit:* a ≥2-iteration scripted loop runs end-to-end; plain `refine` (no flag)
