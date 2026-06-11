@@ -27,6 +27,7 @@ adapters stay oblivious to the *kind* of auth (vendor header vs bearer).
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from collections.abc import Callable
@@ -283,7 +284,16 @@ class OAuthProvider:
             raise CredentialError(
                 f"OAuth refresh for {backend!r} returned no access_token; see {DOCS_REF}"
             )
-        expires_in = float(payload.get("expires_in", 3600))
+        try:
+            expires_in = float(payload.get("expires_in", 3600))
+        except (TypeError, ValueError):
+            raise CredentialError(
+                f"OAuth refresh for {backend!r} returned a non-numeric expires_in; see {DOCS_REF}"
+            ) from None
+        if not math.isfinite(expires_in) or expires_in <= 0:
+            raise CredentialError(
+                f"OAuth refresh for {backend!r} returned an out-of-range expires_in; see {DOCS_REF}"
+            )
         updated = dict(entry)
         updated["access_token"] = new_token
         updated["expires_at"] = now + expires_in
