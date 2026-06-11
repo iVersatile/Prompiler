@@ -50,6 +50,7 @@ from prompiler.obs import configure_logging, get_logger
 from prompiler.pricing import load_pricing
 from prompiler.refine import apply_patch, propose_patch_sync, run_refine_loop
 from prompiler.runtime.errors import AdapterError, EvalError
+from prompiler.runtime.orchestrator import _read_prompiler_block
 from prompiler.runtime.registry import Registry, register_from_path
 from prompiler.spec.linter import lint_spec
 from prompiler.spec.loader import SpecLoadError, load_spec
@@ -83,6 +84,32 @@ class _Backend(StrEnum):
 
 class _Transport(StrEnum):
     http = "http"
+
+
+_BACKEND_ENV = "PROMPILER_BACKEND"
+
+
+def _coerce_backend(value: str, *, source: str) -> str:
+    """Validate ``value`` against :class:`_Backend`; raise on unknown names."""
+    try:
+        return _Backend(value).value
+    except ValueError as exc:
+        choices = ", ".join(member.value for member in _Backend)
+        raise typer.BadParameter(
+            f"unknown backend {value!r} from {source} (choose from: {choices})"
+        ) from exc
+
+
+def _resolve_backend(backend: _Backend | None, block: dict[str, Any]) -> str:
+    """Resolve the active backend via kwarg -> env -> pyproject -> default (LL-008)."""
+    if backend is not None:
+        return backend.value
+    env = os.environ.get(_BACKEND_ENV)
+    if env is not None:
+        return _coerce_backend(env, source=_BACKEND_ENV)
+    if "backend" in block:
+        return _coerce_backend(str(block["backend"]), source="[tool.prompiler] backend")
+    return _Backend.ollama.value
 
 
 app = typer.Typer(
@@ -184,9 +211,9 @@ def eval_cmd(
         typer.Argument(help="Path to the eval fixture YAML file."),
     ],
     backend: Annotated[
-        _Backend,
+        _Backend | None,
         typer.Option(help="Backend to run the eval against (default: ollama)."),
-    ] = _Backend.ollama,
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option(help="Model name override for the backend."),
@@ -223,7 +250,7 @@ def eval_cmd(
         _cmd_eval(
             spec,
             fixtures,
-            backend=backend.value,
+            backend=_resolve_backend(backend, _read_prompiler_block()),
             model=model,
             base_url=base_url,
             json_out=json_out,
@@ -246,9 +273,9 @@ def refine(
         typer.Argument(help="Path to the prompt text file to propose a diff over."),
     ],
     backend: Annotated[
-        _Backend,
+        _Backend | None,
         typer.Option(help="Tutor backend (default: ollama)."),
-    ] = _Backend.ollama,
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option(help="Model name override for the backend."),
@@ -294,7 +321,7 @@ def refine(
         _cmd_refine(
             report,
             prompt,
-            backend=backend.value,
+            backend=_resolve_backend(backend, _read_prompiler_block()),
             model=model,
             base_url=base_url,
             timeout=timeout,
