@@ -198,7 +198,7 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
   required; `--max-iterations` default `3`; ε `0.01` no-improvement guard halts a
   stalled loop. *Exit:* one test each for threshold-hit, max-iterations-hit, and
   ε-stall exit.
-- [ ] **C3. Apply-to-file.** In-place spec write between rounds. **Refuse on a
+- [x] **C3. Apply-to-file.** In-place spec write between rounds. **Refuse on a
   dirty git tree** unless `--force` (git-as-undo; no silent overwrite). *Exit:*
   file mutates across a clean-tree run; a dirty tree aborts before any write;
   `--force` overrides the refusal.
