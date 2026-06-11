@@ -517,3 +517,33 @@ def test_oauth_refresh_missing_access_token_raises(tmp_path: Path) -> None:
     message = str(excinfo.value)
     assert DOCS_REF in message
     assert "\n" not in message
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "body",
+    [
+        b'{"access_token":"new-tok","expires_in":-1}',
+        b'{"access_token":"new-tok","expires_in":0}',
+        b'{"access_token":"new-tok","expires_in":Infinity}',
+        b'{"access_token":"new-tok","expires_in":"not-a-number"}',
+    ],
+    ids=["negative", "zero", "non-finite", "non-numeric"],
+)
+def test_oauth_refresh_invalid_expires_in_raises(tmp_path: Path, body: bytes) -> None:
+    store = tmp_path / "oauth_tokens.json"
+    _write_oauth_store(store, access_token="cached-tok", expires_at=1000.0)
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=body, headers={"content-type": "application/json"})
+
+    client = httpx.Client(transport=httpx.MockTransport(_handler))
+    provider = OAuthProvider(store_path=store, client=client, now=lambda: 5000.0)
+    with pytest.raises(CredentialError) as excinfo:
+        provider.resolve("claude")
+    message = str(excinfo.value)
+    assert "expires_in" in message
+    assert DOCS_REF in message
+    assert "\n" not in message
+    persisted = json.loads(store.read_text(encoding="utf-8"))["claude"]
+    assert persisted["access_token"] == "cached-tok"
