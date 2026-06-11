@@ -229,6 +229,85 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
 
 ---
 
+## 2.3 Q3 — Spec composition / inheritance (expanded)
+
+**Phase tag base for §6 gate:** `main` @ `cfdbea0` (Q2 close — single-`v0.2.0`
+policy means Q2 ships no tag, so the gate base is the Q2-close commit, not a tag).
+**Blast radius:** LARGE — single-owner. One feature touches the spec model,
+loader, hash, and CLI plus a data migration of every repo example; no independent
+sub-track to fan out, so it stays owned by one engineer to avoid merge churn.
+PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
+
+**Scope grounding (from codebase):**
+
+- **Model.** `EntitySpec` (`src/prompiler/spec/model.py:97`) pins
+  `spec_version: Literal[1]` (L102) and sets `extra="forbid"` on all four models;
+  there is **no inheritance field** today. Q3 bumps the literal to `2` and adds an
+  optional `extends`.
+- **Loader.** `load_spec(path) -> EntitySpec` (`src/prompiler/spec/loader.py:91`)
+  has **no inheritance logic** — it parses one file straight into one
+  `EntitySpec`. Q3 adds a **flatten pass**: resolve `extends` into a single flat
+  `EntitySpec` *before* returning, so downstream contracts are untouched.
+- **Walk contract stays flat.** `walk_field` / `walk_fields`
+  (`src/prompiler/compiler/walk.py:34`) and `FieldVisitor[T]` (L13) expect a flat
+  spec. Flatten-before-walk means the walk sees the same shape it always has →
+  **no new emitter, codegen-IR stays un-fired** (§3 q5).
+- **Hash folds for free.** `spec_hash` (`src/prompiler/spec/hash.py:41`) digests
+  `canonical_yaml(spec)` + `COMPILER_PROTOCOL_VERSION`. Because it runs on the
+  loader's *output*, flatten-before-walk makes that output the flattened spec, so
+  the hash already folds over the resolved form with no call relocation (§3 q3).
+- **Migration surface.** Typer CLI (`src/prompiler/cli.py`) uses
+  `@app.command()` + private `_cmd_*` handlers; the nine `examples/*.yaml` are all
+  `spec_version: 1` and must migrate in this PR.
+
+### Track E — Composition core (LARGE, single-owner)
+
+- [ ] **E1. spec_version 1→2 clean break.** Bump
+  `spec_version: Literal[1]` → `Literal[2]` (`spec/model.py:102`); a `version: 1`
+  spec must error with a pointer to `prompiler migrate-spec` (no dual-path
+  loader). *Exit:* a `version: 1` spec raises `SpecLoadError` naming
+  `migrate-spec`; a `version: 2` spec loads; `extra="forbid"` invariants intact.
+- [ ] **E2. `extends` inheritance field.** Add an optional `extends` (parent spec
+  reference) to `EntitySpec`, preserving `extra="forbid"`. *Exit:* a spec with
+  `extends` validates; a malformed `extends` raises `ValueError`; a spec without
+  `extends` still loads (field is optional).
+- [ ] **E3. Flatten-before-walk loader pass.** `load_spec` resolves `extends` into
+  **one flat `EntitySpec`** before returning — child fields override parent,
+  merge order well-defined, inheritance cycles detected. *Exit:* a parent+child
+  pair flattens to the expected merged field set; a cycle raises `SpecLoadError`;
+  `walk.py` runs unchanged on the flattened spec (no walk edits).
+- [ ] **E4. spec_hash over the flattened form.** Confirm `spec_hash` digests the
+  loader's flattened output so cache keys track parent changes (resolves §3 q3 =
+  YES). *Exit:* editing a parent changes the child's `spec_hash`; two specs that
+  flatten field-equal share a hash. **No field provenance metadata** (§3 q —
+  DEFER): the flattener carries no origin record.
+
+### Track F — Migration + examples (MEDIUM)
+
+- [ ] **F1. `prompiler migrate-spec` command.** One-shot Typer command that
+  rewrites a `version: 1` spec to `version: 2` in place. *Exit:* `migrate-spec`
+  on a v1 file yields a loadable v2 file; running it on an already-v2 file is a
+  safe no-op with a clear message (idempotent).
+- [ ] **F2. Migrate repo examples + fixtures.** Convert all nine
+  `examples/*.yaml` to `version: 2` via `migrate-spec`; update any golden
+  fixtures the bump touches. *Exit:* every example loads under the v2 loader; the
+  example/e2e suites stay green.
+
+### Q3 exit criteria (phase-done, feeds §7 gate)
+
+- [ ] All E* and F* boxes checked; full suite green; coverage ≥ 80%.
+- [ ] mypy strict clean across touched modules.
+- [ ] `walk.py` contract unchanged — no new emitter/renderer fired; codegen-IR
+  stays un-fired (§3 q5).
+- [ ] `spec_hash` folds over the flattened form (E4); a parent edit invalidates
+  the child's cache key.
+- [ ] No `version: 1` spec silently accepted; every repo example migrated to
+  `version: 2`.
+- [ ] Field provenance NOT populated (§3 DEFER) — flattener attaches no origin
+  metadata; revisit only when a consumer needs it.
+
+---
+
 ## 3. Open questions
 
 1. ~~v2 theme: depth vs breadth?~~ **RESOLVED: Mixed** (§1).
@@ -238,17 +317,19 @@ tracks share no module, so they parallelize cleanly. PRD anchors: FR-7
    external consumers yet, migration cost ≈ 0. **Clean break, no dual-path
    loader:** `version: 1` errors out with a pointer to a one-shot `prompiler
    migrate-spec`; only one version live at a time. Repo examples/fixtures
-   migrate in the Q3 PR. Sub-qs deferred to Q3 start:
-   - **`spec_hash` folding** (recommend **yes**) — hash over the
+   migrate in the Q3 PR. Sub-qs RESOLVED at Q3 start (see 2.3):
+   - spec_hash folding — RESOLVED: YES. Hash over the
      fully-resolved/flattened form so cache keys stay correct when a parent
-     changes.
-   - **Field provenance (caveat on flatten-before-walk):** flattening collapses
-     inheritance before `walk.py` sees the spec, which *loses* the record of
-     which parent each field came from. If any feature needs that origin (e.g.
-     error messages that point back to the defining parent spec, or
-     debugging/diff tooling), the flattener **must attach provenance metadata**
-     (origin spec id per field) onto the flattened EntitySpec. Cheap to carry;
-     decide in Q3 whether to populate it now or defer until a consumer needs it.
+     changes. spec_hash already runs on the loader's output; flatten-before-walk
+     makes that output the flattened spec, so folding falls out for free with no
+     hash-call relocation. Locked as Q3 task E4.
+   - Field provenance — RESOLVED: DEFER. Flattening collapses inheritance
+     before walk.py sees the spec, which loses the record of which parent each
+     field came from. No Q3 consumer needs that origin yet, so the flattener does
+     NOT attach provenance metadata in Q3. Trigger to populate: the first
+     consumer that needs field origin — parent-aware error messages, or diff/debug
+     tooling. Cheap to add later (origin spec id per field on the flattened
+     EntitySpec); revisit when that consumer lands, not before.
 4. ~~Release cadence?~~ **RESOLVED: Single `v0.2.0`** (§2).
 5. ~~codegen-IR trigger?~~ **RESOLVED: stays un-fired, by design.** Q3
    composition uses **flatten-before-walk** (§2 Q3) — the loader resolves
