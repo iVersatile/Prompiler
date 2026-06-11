@@ -255,6 +255,14 @@ def refine(
         Path | None,
         typer.Option(help="Fixtures YAML to evaluate against (required with --auto-apply)."),
     ] = None,
+    threshold: Annotated[
+        float | None,
+        typer.Option(help="Target aggregate F1 to stop at (required with --auto-apply)."),
+    ] = None,
+    max_iterations: Annotated[
+        int,
+        typer.Option(help="Maximum propose->apply->eval rounds for --auto-apply."),
+    ] = _AUTO_APPLY_MAX_ITERATIONS,
 ) -> None:
     """Propose a prompt edit from an eval report (tutor diff to stdout)."""
     raise typer.Exit(
@@ -268,6 +276,8 @@ def refine(
             auto_apply=auto_apply,
             spec=spec,
             fixtures=fixtures,
+            threshold=threshold,
+            max_iterations=max_iterations,
         )
     )
 
@@ -472,6 +482,8 @@ def _cmd_refine(
     auto_apply: bool = False,
     spec: Path | None = None,
     fixtures: Path | None = None,
+    threshold: float | None = None,
+    max_iterations: int = _AUTO_APPLY_MAX_ITERATIONS,
 ) -> int:
     if not report_path.is_file():
         sys.stderr.write(f"prompiler refine: report not found: {report_path}\n")
@@ -497,6 +509,8 @@ def _cmd_refine(
             timeout=timeout,
             spec=spec,
             fixtures=fixtures,
+            threshold=threshold,
+            max_iterations=max_iterations,
         )
 
     adapter, _hook, _resolved_model = _build_eval_backend(backend, model, base_url)
@@ -527,9 +541,14 @@ def _cmd_refine_auto_apply(
     timeout: float | None,
     spec: Path | None,
     fixtures: Path | None,
+    threshold: float | None,
+    max_iterations: int,
 ) -> int:
     if spec is None or fixtures is None:
         sys.stderr.write("prompiler refine: --auto-apply requires --spec and --fixtures\n")
+        return 2
+    if threshold is None:
+        sys.stderr.write("prompiler refine: --auto-apply requires --threshold\n")
         return 2
     if not spec.is_file():
         sys.stderr.write(f"prompiler refine: spec not found: {spec}\n")
@@ -587,7 +606,8 @@ def _cmd_refine_auto_apply(
             propose=_propose,
             apply=apply_patch,
             evaluate=_evaluate,
-            max_iterations=_AUTO_APPLY_MAX_ITERATIONS,
+            max_iterations=max_iterations,
+            threshold=threshold,
         )
     except AdapterError as exc:
         sys.stderr.write(f"prompiler refine: {exc}\n")
@@ -597,6 +617,7 @@ def _cmd_refine_auto_apply(
 
     for step in outcome.steps:
         sys.stdout.write(f"iteration {step.iteration}: f1={step.f1:.3f}\n")
+    sys.stdout.write(f"stopped: {outcome.stop_reason}\n")
     sys.stdout.write(outcome.final_prompt)
     return 0
 

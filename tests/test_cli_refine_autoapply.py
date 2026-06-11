@@ -104,6 +104,8 @@ def test_auto_apply_runs_multi_iteration_loop(
             str(report_path),
             str(prompt_path),
             "--auto-apply",
+            "--threshold",
+            "0.9",
             "--spec",
             str(_INVOICE_SPEC),
             "--fixtures",
@@ -115,9 +117,40 @@ def test_auto_apply_runs_multi_iteration_loop(
 
     out = capsys.readouterr().out
     assert rc == 0
-    assert propose.calls["n"] == 3
-    assert "iteration 3" in out
-    assert "revision 3" in out
+    # MockAdapter returns a constant extraction -> flat f1 across rounds, so the
+    # epsilon no-improvement guard halts the loop after the second round.
+    assert propose.calls["n"] == 2
+    assert "iteration 2" in out
+    assert "revision 2" in out
+    assert "stopped: stalled" in out
+
+
+@pytest.mark.unit
+def test_auto_apply_requires_threshold(
+    report_path: Path,
+    prompt_path: Path,
+    fixtures_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """``--auto-apply`` without ``--threshold`` is a usage error (rc 2)."""
+    rc = main(
+        [
+            "refine",
+            str(report_path),
+            str(prompt_path),
+            "--auto-apply",
+            "--spec",
+            str(_INVOICE_SPEC),
+            "--fixtures",
+            str(fixtures_path),
+            "--backend",
+            "mock",
+        ]
+    )
+
+    err = capsys.readouterr().err
+    assert rc == 2
+    assert "threshold" in err
 
 
 @pytest.mark.unit

@@ -91,6 +91,67 @@ def test_run_refine_loop_threads_report_between_iterations() -> None:
     assert seen_reports[1] == {"tag": 1}
 
 
+def _scripted_loop(
+    f1_trajectory: list[float],
+    *,
+    threshold: float,
+    max_iterations: int,
+    epsilon: float = 0.01,
+) -> LoopResult:
+    """Drive the loop with a fixed f1 trajectory and no-op propose/apply."""
+    eval_calls: list[str] = []
+
+    def propose(report: dict[str, Any], prompt: str) -> str:
+        return "D"
+
+    def apply(prompt: str, diff: str) -> str:
+        return prompt + diff
+
+    def evaluate(prompt: str) -> tuple[float, dict[str, Any]]:
+        f1 = f1_trajectory[len(eval_calls)]
+        eval_calls.append(prompt)
+        return f1, {"aggregate": {"f1": f1}}
+
+    return run_refine_loop(
+        initial_prompt="P",
+        initial_report={"aggregate": {"f1": 0.0}},
+        propose=propose,
+        apply=apply,
+        evaluate=evaluate,
+        max_iterations=max_iterations,
+        threshold=threshold,
+        epsilon=epsilon,
+    )
+
+
+@pytest.mark.unit
+def test_run_refine_loop_stops_when_threshold_met() -> None:
+    """f1 crossing ``threshold`` halts the loop with ``stop_reason='threshold'``."""
+    result = _scripted_loop([0.5, 0.95], threshold=0.9, max_iterations=5)
+
+    assert result.iterations == 2
+    assert result.stop_reason == "threshold"
+    assert result.steps[-1].f1 == 0.95
+
+
+@pytest.mark.unit
+def test_run_refine_loop_stops_at_max_iterations() -> None:
+    """A loop that never crosses threshold nor stalls runs the full budget."""
+    result = _scripted_loop([0.3, 0.5, 0.7], threshold=0.99, max_iterations=3)
+
+    assert result.iterations == 3
+    assert result.stop_reason == "max_iterations"
+
+
+@pytest.mark.unit
+def test_run_refine_loop_stops_when_improvement_stalls() -> None:
+    """Δf1 below ``epsilon`` between rounds halts with ``stop_reason='stalled'``."""
+    result = _scripted_loop([0.50, 0.505], threshold=0.99, max_iterations=5, epsilon=0.01)
+
+    assert result.iterations == 2
+    assert result.stop_reason == "stalled"
+
+
 @pytest.mark.unit
 def test_run_refine_loop_rejects_non_positive_max_iterations() -> None:
     def _unused_str(*_args: Any) -> str:  # pragma: no cover - never called
