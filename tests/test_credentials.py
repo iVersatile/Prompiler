@@ -28,6 +28,7 @@ from prompiler.backends import (
     EnvVarProvider,
     GeminiAdapter,
     GoogleADCProvider,
+    KeychainProvider,
     OpenAIAdapter,
 )
 from prompiler.backends.credentials import DOCS_REF
@@ -199,6 +200,78 @@ def test_google_adc_refresh_failure(monkeypatch: pytest.MonkeyPatch) -> None:
         GoogleADCProvider().resolve("gemini")
     message = str(excinfo.value)
     assert "RuntimeError" in message
+    assert DOCS_REF in message
+    assert "\n" not in message
+
+
+# KeychainProvider -----------------------------------------------------
+def _install_fake_keyring(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    password: str | None,
+) -> dict[str, Any]:
+    recorder: dict[str, Any] = {"get_password_args": None}
+
+    def _fake_get_password(service: str, username: str) -> str | None:
+        recorder["get_password_args"] = {"service": service, "username": username}
+        return password
+
+    keyring_module = types.ModuleType("keyring")
+    keyring_module.get_password = _fake_get_password  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "keyring", keyring_module)
+    return recorder
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    ("backend", "expected_headers"),
+    [
+        ("claude", {"x-api-key": "kc-claude"}),
+        ("openai", {"authorization": "Bearer kc-openai"}),
+        ("gemini", {"x-goog-api-key": "kc-gemini"}),
+    ],
+)
+def test_keychain_provider_happy_path(
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+    expected_headers: dict[str, str],
+) -> None:
+    recorder = _install_fake_keyring(monkeypatch, password=f"kc-{backend}")
+    cred = KeychainProvider().resolve(backend)
+    assert cred == Credential(headers=expected_headers)
+    assert recorder["get_password_args"] == {"service": "prompiler", "username": backend}
+
+
+@pytest.mark.unit
+def test_keychain_provider_unknown_backend() -> None:
+    with pytest.raises(CredentialError) as excinfo:
+        KeychainProvider().resolve("ollama")
+    message = str(excinfo.value)
+    assert "ollama" in message
+    assert DOCS_REF in message
+    assert "\n" not in message
+
+
+@pytest.mark.unit
+def test_keychain_provider_missing_keyring_dep(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setitem(sys.modules, "keyring", None)
+    with pytest.raises(CredentialError) as excinfo:
+        KeychainProvider().resolve("claude")
+    message = str(excinfo.value)
+    assert "keyring" in message
+    assert "pip install" in message
+    assert "prompiler[keychain]" in message
+    assert DOCS_REF in message
+    assert "\n" not in message
+
+
+@pytest.mark.unit
+def test_keychain_provider_missing_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_keyring(monkeypatch, password=None)
+    with pytest.raises(CredentialError) as excinfo:
+        KeychainProvider().resolve("claude")
+    message = str(excinfo.value)
+    assert "claude" in message
     assert DOCS_REF in message
     assert "\n" not in message
 

@@ -32,6 +32,8 @@ _ENV_VAR_BY_BACKEND: dict[str, str] = {
     "gemini": "GOOGLE_API_KEY",
 }
 
+_KEYCHAIN_SERVICE = "prompiler"
+
 
 class CredentialError(RuntimeError):
     """Raised when a credential cannot be resolved.
@@ -123,3 +125,32 @@ class GoogleADCProvider:
         if not token:
             raise CredentialError(f"Google ADC returned empty token; see {DOCS_REF}")
         return Credential(headers={"authorization": f"Bearer {token}"})
+
+
+class KeychainProvider:
+    """Read API keys from the OS keychain via the ``keyring`` library.
+
+    ``keyring`` is imported lazily so callers not using the keychain don't pay
+    the dependency. Secrets are stored under the ``prompiler`` service, keyed by
+    backend name; a missing entry raises :class:`CredentialError`.
+    """
+
+    def resolve(self, backend: str) -> Credential:
+        if backend not in _ENV_VAR_BY_BACKEND:
+            raise CredentialError(
+                f"KeychainProvider does not support backend {backend!r}; see {DOCS_REF}"
+            )
+        try:
+            import keyring  # type: ignore[import-not-found]
+        except ImportError as exc:
+            raise CredentialError(
+                "KeychainProvider requires 'keyring' extra: "
+                f"pip install 'prompiler[keychain]'; see {DOCS_REF}"
+            ) from exc
+        value = keyring.get_password(_KEYCHAIN_SERVICE, backend)
+        if not value:
+            raise CredentialError(
+                f"missing keychain credential for {backend!r}: "
+                f"add it under service {_KEYCHAIN_SERVICE!r}; see {DOCS_REF}"
+            )
+        return Credential(headers=_api_key_headers(backend, value))
