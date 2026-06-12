@@ -16,13 +16,20 @@ from __future__ import annotations
 
 import base64
 import copy
-from collections.abc import Sequence
+import json
+import time
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import httpx
 
-from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
+from prompiler.backends._pipeline import iter_sse_data, post_with_retry, truncate_for_error
+from prompiler.backends.base import (
+    CapabilityError,
+    ExtractResult,
+    ModalContent,
+    StreamEvent,
+)
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -170,8 +177,90 @@ class ClaudeAdapter:
             f"{truncate_for_error(body)}"
         )
 
+    async def stream_extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+        temperature: float = 0.0,
+        seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream the same extract as ``extract``, yielding deltas then a terminal event.
+
+        Drives ``/v1/messages`` with ``"stream": True`` and decodes the Anthropic
+        SSE wire log via ``iter_sse_data``: ``input_json_delta`` fragments are
+        re-emitted as non-terminal ``StreamEvent``s and accumulated; ``json.loads``
+        of the assembled fragments yields the same payload the buffered ``extract``
+        returns, surfaced in one terminal ``StreamEvent``. Token usage is captured
+        from ``message_start``/``message_delta`` for metric parity with ``extract``.
+        No retry — a partially consumed stream cannot be safely replayed (G4).
+        """
+        content = _build_content(prompt, modal_parts)
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "max_tokens": self._max_tokens,
+            "temperature": temperature,
+            "stream": True,
+            "messages": [{"role": "user", "content": content}],
+            "tools": [
+                {
+                    "name": EXTRACT_TOOL_NAME,
+                    "description": EXTRACT_TOOL_DESCRIPTION,
+                    "input_schema": json_schema,
+                }
+            ],
+            "tool_choice": {"type": "tool", "name": EXTRACT_TOOL_NAME},
+        }
+
+        fragments: list[str] = []
+        prompt_tokens = 0
+        completion_tokens = 0
+        started = time.perf_counter()
+        async for frame in iter_sse_data(
+            client=self._client,
+            path="/v1/messages",
+            payload=payload,
+            vendor_label="Claude",
+            timeout=timeout,
+        ):
+            frame_type = frame.get("type")
+            if frame_type == "message_start":
+                usage = (frame.get("message") or {}).get("usage") or {}
+                prompt_tokens = int(usage.get("input_tokens", 0))
+            elif frame_type == "content_block_delta":
+                delta = frame.get("delta") or {}
+                if delta.get("type") == "input_json_delta":
+                    fragment = str(delta.get("partial_json", ""))
+                    fragments.append(fragment)
+                    yield StreamEvent(delta=fragment)
+            elif frame_type == "message_delta":
+                usage = frame.get("usage") or {}
+                completion_tokens = int(usage.get("output_tokens", 0))
+        latency = time.perf_counter() - started
+
+        data = json.loads("".join(fragments))
+        await emit_call_metrics(
+            hook=self._observability,
+            backend="claude",
+            model=self._model,
+            latency_seconds=latency,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self._pricing,
+        )
+        yield StreamEvent(
+            delta="",
+            result=ExtractResult(
+                data=data,
+                system_fingerprint=None,
+                deterministic=False,
+            ),
+        )
+
     def supports(self, feature: str) -> bool:
-        return feature == "multimodal"
+        return feature in {"multimodal", "streaming"}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

@@ -6,14 +6,15 @@ adapter cleanly reports unsupported." This file is the RED test for that
 contract; the buffered ``extract`` contract lives in
 ``tests/test_backend_contract.py`` and is untouched here.
 
-The streaming contract adds two symbols to ``prompiler.backends.base`` that do
-not exist yet (so this module fails at import until G1 lands):
+The streaming contract adds two symbols to ``prompiler.backends.base``:
 
   * ``StreamEvent`` — one incremental delta, with a terminal event carrying the
     final ``ExtractResult`` (``result is not None`` ⇔ terminal).
   * ``StreamingBackendAdapter`` — a ``@runtime_checkable`` Protocol that extends
-    ``BackendAdapter`` with ``stream_extract``. None of the four real adapters
-    implement it in G1; they keep satisfying ``BackendAdapter`` and report
+    ``BackendAdapter`` with ``stream_extract``. Adapters opt in individually:
+    Claude streams in G2 (satisfies ``StreamingBackendAdapter`` and reports
+    ``supports('streaming') is True``), while OpenAI, Gemini, and Ollama remain
+    buffered-only — they keep satisfying ``BackendAdapter`` and report
     ``supports('streaming') is False`` via the unknown-feature default.
 
 No network: the real-adapter checks build a bare ``httpx.AsyncClient`` and only
@@ -44,14 +45,14 @@ from prompiler.backends import (
 )
 from prompiler.backends.mock import MockAdapter
 
-ALL_ADAPTER_CLASSES = [
+STREAMING_ADAPTER_CLASSES = [ClaudeAdapter]
+NON_STREAMING_ADAPTER_CLASSES = [
     MockAdapter,
-    ClaudeAdapter,
     OpenAIAdapter,
     GeminiAdapter,
     OllamaAdapter,
 ]
-REAL_ADAPTER_CLASSES = [ClaudeAdapter, OpenAIAdapter, GeminiAdapter, OllamaAdapter]
+NON_STREAMING_REAL_ADAPTER_CLASSES = [OpenAIAdapter, GeminiAdapter, OllamaAdapter]
 
 
 def _terminal_result() -> ExtractResult:
@@ -106,9 +107,15 @@ def test_streaming_adapter_satisfies_both_protocols() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("cls", ALL_ADAPTER_CLASSES)
-def test_existing_adapter_classes_have_no_streaming_method(cls: type) -> None:
+@pytest.mark.parametrize("cls", NON_STREAMING_ADAPTER_CLASSES)
+def test_non_streaming_adapter_classes_have_no_streaming_method(cls: type) -> None:
     assert not hasattr(cls, "stream_extract")
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cls", STREAMING_ADAPTER_CLASSES)
+def test_streaming_adapter_classes_have_streaming_method(cls: type) -> None:
+    assert hasattr(cls, "stream_extract")
 
 
 @pytest.mark.unit
@@ -117,14 +124,27 @@ def test_mock_adapter_reports_streaming_unsupported() -> None:
 
 
 @pytest.mark.unit
-@pytest.mark.parametrize("cls", REAL_ADAPTER_CLASSES)
-def test_real_adapter_reports_streaming_unsupported(cls: type) -> None:
+@pytest.mark.parametrize("cls", NON_STREAMING_REAL_ADAPTER_CLASSES)
+def test_non_streaming_real_adapter_reports_streaming_unsupported(cls: type) -> None:
     client = httpx.AsyncClient()
     try:
         adapter = cls(client=client)
         assert isinstance(adapter, BackendAdapter)
         assert not isinstance(adapter, StreamingBackendAdapter)
         assert adapter.supports("streaming") is False
+    finally:
+        asyncio.run(client.aclose())
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("cls", STREAMING_ADAPTER_CLASSES)
+def test_streaming_real_adapter_reports_streaming_supported(cls: type) -> None:
+    client = httpx.AsyncClient()
+    try:
+        adapter = cls(client=client)
+        assert isinstance(adapter, BackendAdapter)
+        assert isinstance(adapter, StreamingBackendAdapter)
+        assert adapter.supports("streaming") is True
     finally:
         asyncio.run(client.aclose())
 

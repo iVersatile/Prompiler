@@ -351,7 +351,7 @@ PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
 
 ### Track G — Streaming core (LARGE, single-owner)
 
-- [ ] **G1. Streaming contract on `BackendAdapter`.** Add an async-iterator
+- [x] **G1. Streaming contract on `BackendAdapter`.** Add an async-iterator
   streaming method (e.g. `stream_extract(...) -> AsyncIterator[StreamEvent]`) to the
   Protocol (`backends/base.py:84-102`) plus a `supports("streaming")` flag
   (mirrors L104-118). Keep `extract` as the terminal/buffered path. *Exit:* the

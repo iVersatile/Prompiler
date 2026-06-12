@@ -14,7 +14,9 @@ traceback.
 
 from __future__ import annotations
 
+import json
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 
 import httpx
@@ -58,6 +60,43 @@ async def post_with_retry(
     latency = time.perf_counter() - started
     body: dict[str, Any] = response.json()
     return body, latency
+
+
+async def iter_sse_data(
+    *,
+    client: httpx.AsyncClient,
+    path: str,
+    payload: dict[str, Any],
+    vendor_label: str,
+    timeout: float | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream a POST as Server-Sent Events, yielding each ``data:`` frame's JSON.
+
+    The streaming sibling of ``post_with_retry``: open ``client.stream``, raise
+    the same vendor-prefixed ``HTTPStatusError`` on 4xx/5xx (LL-003, reading the
+    body first so the message carries it), then yield one decoded dict per
+    non-empty ``data:`` line. ``event:`` and blank framing lines fall through the
+    ``data:`` guard. No retry: a partially-consumed stream cannot be safely
+    replayed — retry parity is deferred to G4.
+    """
+    stream_kwargs: dict[str, Any] = {"json": payload}
+    if timeout is not None:
+        stream_kwargs["timeout"] = timeout
+    async with client.stream("POST", path, **stream_kwargs) as response:
+        if response.status_code >= 400:
+            await response.aread()
+            raise httpx.HTTPStatusError(
+                f"{vendor_label} {response.status_code}: {truncate_for_error(response.text)}",
+                request=response.request,
+                response=response,
+            )
+        async for line in response.aiter_lines():
+            if not line.startswith("data:"):
+                continue
+            data = line[len("data:") :].strip()
+            if not data:
+                continue
+            yield json.loads(data)
 
 
 def truncate_for_error(value: Any, *, limit: int = 200) -> str:
