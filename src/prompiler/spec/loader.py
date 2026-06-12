@@ -12,6 +12,8 @@ from prompiler.spec.model import EntitySpec
 
 _LINE_KEY = "__line__"
 _COL_KEY = "__column__"
+_FILE_KEY = "__file__"
+_MARK_KEYS = (_LINE_KEY, _COL_KEY, _FILE_KEY)
 
 
 class SpecLoadError(Exception):
@@ -62,19 +64,43 @@ _LineMappingLoader.add_constructor(
 
 def _strip_marks(value: Any) -> Any:
     if isinstance(value, dict):
-        return {k: _strip_marks(v) for k, v in value.items() if k not in (_LINE_KEY, _COL_KEY)}
+        return {k: _strip_marks(v) for k, v in value.items() if k not in _MARK_KEYS}
     if isinstance(value, list):
         return [_strip_marks(item) for item in value]
     return value
 
 
-def _lookup_loc(raw: Any, loc: tuple[Any, ...]) -> tuple[int | None, int | None]:
+def _tag_file(value: Any, file: Path) -> Any:
+    """Annotate every mapping in `value` with its originating `__file__`.
+
+    Recurses into child values before stamping the dict so the file tag itself
+    is never traversed. Lists are walked element-wise.
+    """
+    if isinstance(value, dict):
+        for v in value.values():
+            _tag_file(v, file)
+        value[_FILE_KEY] = file
+    elif isinstance(value, list):
+        for item in value:
+            _tag_file(item, file)
+    return value
+
+
+def _lookup_origin(raw: Any, loc: tuple[Any, ...]) -> tuple[int | None, int | None, Path | None]:
+    """Walk `loc` from `raw`, returning the nearest mapping's line/column/file.
+
+    Each level updates line/column/file from the deepest mapping that carries
+    marks, so an error path resolves to the originating file even when the node
+    was inherited from a parent spec via `extends`.
+    """
     node: Any = raw
     line: int | None = None
     column: int | None = None
+    file: Path | None = None
     if isinstance(node, dict):
         line = node.get(_LINE_KEY)
         column = node.get(_COL_KEY)
+        file = node.get(_FILE_KEY)
     for key in loc:
         if isinstance(node, dict) and isinstance(key, str) and key in node:  # noqa: SIM114
             node = node[key]
@@ -85,6 +111,12 @@ def _lookup_loc(raw: Any, loc: tuple[Any, ...]) -> tuple[int | None, int | None]
         if isinstance(node, dict):
             line = node.get(_LINE_KEY, line)
             column = node.get(_COL_KEY, column)
+            file = node.get(_FILE_KEY, file)
+    return line, column, file
+
+
+def _lookup_loc(raw: Any, loc: tuple[Any, ...]) -> tuple[int | None, int | None]:
+    line, column, _ = _lookup_origin(raw, loc)
     return line, column
 
 
@@ -143,6 +175,7 @@ def _load_raw(p: Path) -> dict[str, Any]:
             column=v1_col,
         )
 
+    _tag_file(raw, p)
     return raw
 
 
@@ -217,15 +250,14 @@ def _flatten(path: Path, raw: dict[str, Any], seen: frozenset[Path]) -> dict[str
             column=c_col,
         )
 
-    clean = cast("dict[str, Any]", _strip_marks(raw))
-    extends_ref = clean.get("extends")
+    extends_ref = raw.get("extends")
     if not isinstance(extends_ref, str) or not extends_ref.strip():
-        return clean
+        return raw
 
     parent_path = _resolve_parent_path(path, extends_ref)
     parent_raw = _load_raw(parent_path)
     parent_flat = _flatten(parent_path, parent_raw, seen | {resolved})
-    merged = _merge(parent_flat, clean)
+    merged = _merge(parent_flat, raw)
     merged.pop("extends", None)
     return merged
 
@@ -241,19 +273,21 @@ def load_spec(path: Path | str) -> EntitySpec:
     """
     p = Path(path)
     raw = _load_raw(p)
-    flattened = _flatten(p, raw, frozenset())
+    marked = _flatten(p, raw, frozenset())
+    flattened = cast("dict[str, Any]", _strip_marks(marked))
 
     try:
         return EntitySpec.model_validate(flattened)
     except ValidationError as exc:
         err = exc.errors()[0]
         loc = tuple(err["loc"])
-        loc_line, loc_col = _lookup_loc(raw, loc)
-        err_line: int = loc_line if loc_line is not None else raw.get(_LINE_KEY, 1)
-        err_col: int = loc_col if loc_col is not None else raw.get(_COL_KEY, 0)
+        loc_line, loc_col, loc_file = _lookup_origin(marked, loc)
+        err_line: int = loc_line if loc_line is not None else marked.get(_LINE_KEY, 1)
+        err_col: int = loc_col if loc_col is not None else marked.get(_COL_KEY, 0)
+        err_file: Path = loc_file if loc_file is not None else p
         loc_path = ".".join(str(x) for x in loc) or "<root>"
         raise SpecLoadError(
-            file=p,
+            file=err_file,
             message=f"spec validation failed at {loc_path}: {err['msg']}",
             line=err_line,
             column=err_col,

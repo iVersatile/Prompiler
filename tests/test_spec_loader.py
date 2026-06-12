@@ -439,6 +439,40 @@ def test_load_spec_extends_self_cycle_detected(tmp_path: Path) -> None:
     assert "cycle" in str(excinfo.value).lower()
 
 
+@pytest.mark.unit
+def test_load_spec_extends_inherited_field_error_points_to_parent(tmp_path: Path) -> None:
+    """A validation error on a parent-only (inherited) field must report the
+    PARENT file and the parent field's line, not the child root (line 1)."""
+    parent = {
+        "spec_version": 2,
+        "name": "base_invoice",
+        "task": "extract",
+        "fields": [
+            {"name": "vendor_name", "type": "badtype", "required": True},
+        ],
+    }
+    child = {
+        "spec_version": 2,
+        "name": "child_invoice",
+        "task": "extract",
+        "extends": "base_invoice",
+        "fields": [
+            {"name": "currency", "type": "enum", "values": ["USD", "EUR"], "required": True},
+        ],
+    }
+    parent_path = _write_yaml(tmp_path, "base_invoice.yaml", parent)
+    child_path = _write_yaml(tmp_path, "child_invoice.yaml", child)
+
+    with pytest.raises(SpecLoadError) as excinfo:
+        load_spec(child_path)
+
+    err = excinfo.value
+    assert err.file == parent_path
+    parent_lines = parent_path.read_text(encoding="utf-8").splitlines()
+    expected_line = next(i for i, ln in enumerate(parent_lines, start=1) if "vendor_name" in ln)
+    assert err.line == expected_line
+
+
 # ---------------------------------------------------------------------------
 # Error rendering
 # ---------------------------------------------------------------------------
