@@ -288,7 +288,7 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
   rewrites a `version: 1` spec to `version: 2` in place. *Exit:* `migrate-spec`
   on a v1 file yields a loadable v2 file; running it on an already-v2 file is a
   safe no-op with a clear message (idempotent).
-- [ ] **F2. Migrate repo examples + fixtures.** Convert all nine
+- [x] **F2. Migrate repo examples + fixtures.** Convert all nine
   `examples/*.yaml` to `version: 2` via `migrate-spec`; update any golden
   fixtures the bump touches. *Exit:* every example loads under the v2 loader; the
   example/e2e suites stay green.
