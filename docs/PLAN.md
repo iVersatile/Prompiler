@@ -262,7 +262,7 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
 
 ### Track E — Composition core (LARGE, single-owner)
 
-- [ ] **E1. spec_version 1→2 clean break.** Bump
+- [x] **E1. spec_version 1→2 clean break.** Bump
   `spec_version: Literal[1]` → `Literal[2]` (`spec/model.py:102`); a `version: 1`
   spec must error with a pointer to `prompiler migrate-spec` (no dual-path
   loader). *Exit:* a `version: 1` spec raises `SpecLoadError` naming
