@@ -27,7 +27,7 @@ from prompiler.spec import EntitySpec, canonical_yaml, load_spec, spec_hash
 
 def _invoice_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -62,7 +62,7 @@ def _invoice_spec() -> dict[str, Any]:
 
 def _email_category_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Route inbound support email into one routing bucket.",

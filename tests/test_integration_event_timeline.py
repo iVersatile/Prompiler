@@ -30,7 +30,7 @@ from prompiler.spec import EntitySpec
 _RETRY_BUDGET: Final[int] = 2
 
 _TIMELINE_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "incident_timeline",
     "task": "extract",
     "fields": [

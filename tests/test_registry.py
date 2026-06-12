@@ -51,7 +51,7 @@ from prompiler.registry import (
 from prompiler.spec import EntitySpec, SpecLoadError
 
 INVOICE_SPEC: dict[str, object] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "invoice",
     "task": "extract",
     "description": "Extract invoice fields.",
@@ -194,7 +194,7 @@ def test_empty_registry_names_is_empty_frozenset() -> None:
 
 
 RECEIPT_SPEC: dict[str, object] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "receipt",
     "task": "extract",
     "description": "Extract receipt fields.",
@@ -225,7 +225,7 @@ def test_register_from_dict_returns_bundle_and_stores_under_spec_name() -> None:
 @pytest.mark.unit
 def test_register_from_dict_invalid_spec_raises_validation_error() -> None:
     reg = Registry()
-    bad_spec = {"spec_version": 1, "name": "x"}  # missing required fields
+    bad_spec = {"spec_version": 2, "name": "x"}  # missing required fields
 
     with pytest.raises(ValidationError):
         register_from_dict(bad_spec, registry=reg)

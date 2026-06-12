@@ -39,7 +39,7 @@ from prompiler.cli import main
 
 def _clean_extract_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -62,7 +62,7 @@ def _clean_extract_spec() -> dict[str, Any]:
 
 def _clean_classify_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Route inbound support email into one routing bucket.",
@@ -192,7 +192,7 @@ def test_validate_yaml_syntax_error(tmp_path: Path, capsys: pytest.CaptureFixtur
 @pytest.mark.unit
 def test_validate_pydantic_error(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     spec = _clean_extract_spec()
-    spec["spec_version"] = 2
+    spec["task"] = "bogus"
     f = _write_yaml(tmp_path / "invoice.yaml", spec)
     rc = main(["validate", str(f)])
     assert rc == 1
@@ -258,7 +258,7 @@ def test_codegen_directory_rejected(tmp_path: Path, capsys: pytest.CaptureFixtur
 @pytest.mark.unit
 def test_codegen_load_error_returns_one(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     spec = _clean_extract_spec()
-    spec["spec_version"] = 2
+    spec["task"] = "bogus"
     f = _write_yaml(tmp_path / "invoice.yaml", spec)
     rc = main(["codegen", str(f), "-o", str(tmp_path / "out")])
     assert rc == 1

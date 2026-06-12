@@ -131,6 +131,21 @@ def load_spec(path: Path | str) -> EntitySpec:
             column=0,
         )
 
+    version = raw.get("spec_version")
+    if not isinstance(version, bool) and version == 1:
+        loc_line, loc_col = _lookup_loc(raw, ("spec_version",))
+        v1_line: int = loc_line if loc_line is not None else raw.get(_LINE_KEY, 1)
+        v1_col: int = loc_col if loc_col is not None else raw.get(_COL_KEY, 0)
+        raise SpecLoadError(
+            file=p,
+            message=(
+                "spec_version 1 is no longer supported; "
+                "run `prompiler migrate-spec` to upgrade this spec to version 2"
+            ),
+            line=v1_line,
+            column=v1_col,
+        )
+
     clean = _strip_marks(raw)
 
     try:

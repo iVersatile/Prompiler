@@ -1,4 +1,4 @@
-spec_version: 1
+spec_version: 2
 name: contract_obligation
 task: extract
 description: Extract a single obligation clause from a contract document.

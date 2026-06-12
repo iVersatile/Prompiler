@@ -47,7 +47,7 @@ class _SpecDict(TypedDict):
 
 
 _INVOICE_SPEC: Final[_SpecDict] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "invoice_line",
     "task": "extract",
     "fields": [
@@ -57,7 +57,7 @@ _INVOICE_SPEC: Final[_SpecDict] = {
 }
 
 _RECEIPT_SPEC: Final[_SpecDict] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "receipt_line",
     "task": "extract",
     "fields": [

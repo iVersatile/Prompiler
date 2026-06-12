@@ -31,7 +31,7 @@ from prompiler.runtime.registry import Registry, register_from_dict
 _T = TypeVar("_T")
 
 INVOICE_SPEC: dict[str, Any] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "invoice",
     "task": "extract",
     "description": "Extract invoice fields.",

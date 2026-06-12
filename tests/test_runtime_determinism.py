@@ -191,7 +191,7 @@ def test_openai_absent_system_fingerprint_surfaces_none() -> None:
 def _register(name: str) -> Registry:
     spec = EntitySpec.model_validate(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": name,
             "task": "extract",
             "fields": [{"name": "title", "type": "string", "required": True}],

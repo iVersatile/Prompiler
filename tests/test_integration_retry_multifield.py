@@ -36,7 +36,7 @@ _CORRECTIVE_MARKER: Final[str] = "Previous attempt failed validation."
 
 # Three required string fields so several can fail simultaneously.
 _INCIDENT_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "incident",
     "task": "extract",
     "fields": [
