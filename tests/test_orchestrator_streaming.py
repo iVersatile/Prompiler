@@ -30,7 +30,7 @@ from prompiler.backends.base import ExtractResult, ModalContent, StreamEvent
 from prompiler.compiler import compile_spec
 from prompiler.runtime import ExtractionFailed
 from prompiler.runtime.errors import AdapterError
-from prompiler.runtime.orchestrator import run, run_stream
+from prompiler.runtime.orchestrator import result_cache_info, run, run_stream
 from prompiler.runtime.registry import Registry
 from prompiler.spec import EntitySpec
 
@@ -251,8 +251,131 @@ def test_run_stream_terminal_model_field_equals_buffered_run() -> None:
     streamed_adapter = _ScriptedStreamingAdapter([(["{", "x"], {"title": "parity"})])
 
     buffered = asyncio.run(run("doc", "body", backend=buffered_adapter, registry=registry))
-    streamed = _drain(run_stream("doc", "body", backend=streamed_adapter, registry=registry))[-1]
+    # ``disable_cache`` keeps this a genuine streaming run: the buffered ``run``
+    # above populates the shared cache key (same spec/backend-class/text/prompt),
+    # so without opting out ``run_stream`` would hit the cache and never stream.
+    streamed = _drain(
+        run_stream("doc", "body", backend=streamed_adapter, registry=registry, disable_cache=True)
+    )[-1]
 
     assert isinstance(buffered, BaseModel)
     assert isinstance(streamed, BaseModel)
     assert buffered.title == streamed.title == "parity"  # type: ignore[attr-defined]
+    assert streamed_adapter.calls == 1
+
+
+# --- Track H1: result-cache interaction (PLAN.md §2.4) -----------------------
+#
+# H1 makes ``run_stream`` cache-aware with the *same* ``_RESULT_CACHE`` key as
+# ``run`` (spec_hash, backend-class, model, input_hash, prompt_hash). The
+# terminal validated model is memoized only after the stream fully drains; a
+# cache hit replays as an already-complete (non-streaming) result — a single
+# ``BaseModel`` yielded with no deltas and no adapter call.
+
+
+@pytest.mark.unit
+def test_run_stream_populates_cache_only_on_completion() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedStreamingAdapter([(["a", "b"], {"title": "ok"})])
+
+    async def _scenario() -> None:
+        agen = run_stream("doc", "body", backend=adapter, registry=registry)
+        # Mid-stream: each non-terminal delta leaves the cache empty.
+        first = await agen.__anext__()
+        assert isinstance(first, StreamEvent)
+        assert result_cache_info().currsize == 0
+        second = await agen.__anext__()
+        assert isinstance(second, StreamEvent)
+        assert result_cache_info().currsize == 0
+        # Drain completes: the validated model is yielded and the cache populated.
+        final = await agen.__anext__()
+        assert isinstance(final, BaseModel)
+        assert result_cache_info().currsize == 1
+        with pytest.raises(StopAsyncIteration):
+            await agen.__anext__()
+
+    asyncio.run(_scenario())
+    assert result_cache_info().misses == 1
+    assert result_cache_info().hits == 0
+
+
+@pytest.mark.unit
+def test_run_stream_cache_hit_returns_full_model_without_restreaming() -> None:
+    registry = _register("doc")
+    first_adapter = _ScriptedStreamingAdapter([(["{", "x"], {"title": "ok"})])
+    # Empty script: any adapter call pops from ``[]`` and raises IndexError.
+    second_adapter = _ScriptedStreamingAdapter([])
+
+    _drain(run_stream("doc", "body", backend=first_adapter, registry=registry))
+    items = _drain(run_stream("doc", "body", backend=second_adapter, registry=registry))
+
+    assert second_adapter.calls == 0
+    assert not any(isinstance(i, StreamEvent) for i in items)
+    assert len(items) == 1
+    assert isinstance(items[0], BaseModel)
+    assert items[0].title == "ok"  # type: ignore[attr-defined]
+    assert result_cache_info().hits == 1
+
+
+@pytest.mark.unit
+def test_run_stream_aborted_stream_leaves_no_cache_entry() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedStreamingAdapter([(["a", "b", "c"], {"title": "ok"})])
+
+    async def _scenario() -> None:
+        agen = run_stream("doc", "body", backend=adapter, registry=registry)
+        first = await agen.__anext__()
+        assert isinstance(first, StreamEvent)
+        await agen.aclose()
+
+    asyncio.run(_scenario())
+    assert result_cache_info().currsize == 0
+
+
+@pytest.mark.unit
+def test_run_stream_validation_failure_leaves_no_cache_entry() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedStreamingAdapter(
+        [
+            (["x"], {"wrong_key": "x"}),
+            (["y"], {"wrong_key": "y"}),
+        ]
+    )
+
+    with pytest.raises(ExtractionFailed):
+        _drain(run_stream("doc", "body", backend=adapter, registry=registry))
+
+    assert result_cache_info().currsize == 0
+    assert result_cache_info().misses == 1
+
+
+@pytest.mark.unit
+def test_run_stream_disable_cache_skips_lookup_and_populate() -> None:
+    registry = _register("doc")
+    adapter = _ScriptedStreamingAdapter([(["x"], {"title": "ok"})])
+
+    items = _drain(
+        run_stream("doc", "body", backend=adapter, registry=registry, disable_cache=True)
+    )
+
+    assert isinstance(items[-1], BaseModel)
+    assert result_cache_info().currsize == 0
+    assert result_cache_info().misses == 0
+    assert result_cache_info().hits == 0
+
+
+@pytest.mark.unit
+def test_run_stream_hits_cache_populated_by_buffered_run() -> None:
+    registry = _register("doc")
+    buffered_adapter = _ScriptedStreamingAdapter([([], {"title": "shared"})])
+    # Empty script: proves the streaming path is never entered on a cache hit.
+    streamed_adapter = _ScriptedStreamingAdapter([])
+
+    asyncio.run(run("doc", "body", backend=buffered_adapter, registry=registry))
+    items = _drain(run_stream("doc", "body", backend=streamed_adapter, registry=registry))
+
+    assert streamed_adapter.calls == 0
+    assert len(items) == 1
+    assert isinstance(items[0], BaseModel)
+    assert items[0].title == "shared"  # type: ignore[attr-defined]
+    assert result_cache_info().hits == 1

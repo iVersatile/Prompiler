@@ -341,6 +341,7 @@ async def run_stream(
     temperature: float | _Unset = _UNSET,
     seed: int | None | _Unset = _UNSET,
     modal_parts: Sequence[ModalContent] = (),
+    disable_cache: bool | _Unset = _UNSET,
 ) -> AsyncIterator[StreamEvent | BaseModel]:
     """Streaming sibling of :func:`run` (PLAN.md §2.4 G4).
 
@@ -354,12 +355,26 @@ async def run_stream(
     corrective-feedback prompt (whose deltas also stream) then raises
     ``ExtractionFailed from second_err``.
 
-    The result cache is deliberately bypassed: a partial stream is observable to
-    the caller, so there is no buffered value to memoize and no key to look up
-    (Track H1 owns any future streaming/cache interaction).
+    The result cache (Track H1) shares its key with :func:`run`, so the two paths
+    are coherent for identical spec/backend/text/prompt. The terminal validated
+    model is memoized only after the stream fully drains; a cache hit replays as
+    an already-complete (non-streaming) result — the cached model is yielded as
+    the sole item with no deltas and no adapter call. An aborted stream (consumer
+    closes the generator before drain) and a run that fails validation both leave
+    no cache entry, mirroring :func:`run`'s "never store a failed attempt" rule.
     """
     bundle = _resolve(registry).get(name)
     block = _read_prompiler_block()
+    cache_disabled = _resolve_cache_disabled(disable_cache, block)
+
+    cache_key = _result_cache_key(bundle.spec_hash, backend, text, modal_parts, bundle.prompt)
+    if not cache_disabled:
+        cached = _RESULT_CACHE.get(cache_key)
+        if cached is not None:
+            _RESULT_CACHE_STATS["hits"] += 1
+            yield cached
+            return
+        _RESULT_CACHE_STATS["misses"] += 1
 
     _check_doc_size(text, bundle.max_input_tokens)
 
@@ -412,6 +427,8 @@ async def run_stream(
             raise ExtractionFailed(
                 f"validation failed after retry for spec {name!r}"
             ) from second_err
+    if not cache_disabled:
+        _RESULT_CACHE[cache_key] = validated
     yield validated
 
 
