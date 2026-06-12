@@ -308,6 +308,109 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
 
 ---
 
+## 2.4 Q4 — Streaming responses (expanded)
+
+**Phase tag base for §6 gate:** `main` @ `5181e4f` (Q3 close — single-`v0.2.0`
+policy means Q3 ships no tag, so the gate base is the Q3-close commit, not a tag).
+The pre-Q4 residual-finding fixes this gate surfaced (PRs #49/#50,
+`149c968`…`7051067`) are already merged; Q4 branches from `7051067`.
+**Blast radius:** LARGE — single-owner, highest of the v2 phases. One change
+narrows the `extract` contract across the Protocol, all four adapters, the
+orchestrator retry path, the result cache, and the MCP surface; no independent
+sub-track to fan out, so it stays owned by one engineer to avoid merge churn.
+PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
+
+**Scope grounding (from codebase):**
+
+- **Protocol.** `BackendAdapter` (`src/prompiler/backends/base.py:84`) exposes one
+  terminal method `async def extract(...) -> ExtractResult` (L93-102) returning a
+  single `ExtractResult` dataclass (L61-82); capability gating is `supports(feature)`
+  (L104-118, e.g. `"seed"`, `"multimodal"`). Q4 adds a streaming surface plus a
+  `"streaming"` capability flag — a **contract narrowing → §7.1 FR-citation**.
+- **No async iterators today.** All four adapters and the orchestrator are
+  `async def` but value-returning; a codebase grep finds **no** `AsyncIterator` /
+  `async for` / `yield` (only comments). Q4 introduces the first one.
+- **SSE adapters.** Claude (`backends/claude.py:115`), OpenAI (`openai.py:109`),
+  Gemini (`gemini.py:125`) each issue a single `post_with_retry()` POST and parse
+  one response body for the forced tool-use / function-call block. Streaming means
+  consuming Server-Sent-Event deltas and assembling the same final tool input.
+- **NDJSON adapter.** Ollama (`backends/ollama.py:67`) **explicitly sets**
+  `"stream": False` (L94) and `json.loads()` of `message.content` (L106-121).
+  Streaming flips that flag and assembles the NDJSON chunk sequence.
+- **Orchestrator retry.** `run()` (`runtime/orchestrator.py:260`) calls `extract`
+  (L293-300), validates, and on `ValidationError` does **one** corrective re-extract
+  (L302-320) before `ExtractionFailed`. Validation needs the whole JSON, so it runs
+  on the **assembled terminal payload**, not mid-stream.
+- **Result cache.** `_RESULT_CACHE` lookup at `orchestrator.py:277`, populate at
+  `:323` (only on successful validation). A half-consumed stream is uncacheable —
+  cache must key on the completed terminal model.
+- **MCP surface.** The `extract` tool closure `_tool()` (`mcp/app.py:129-151`) wraps
+  `orchestrator.run()` (L133) under a `MAX_TEXT_BYTES` guard (L130-131) and a
+  `CapturingHook` usage drain (L132-146). **No `prompiler extract` CLI** exists
+  (extract deferred per RULES §9) — no CLI surface to thread.
+
+### Track G — Streaming core (LARGE, single-owner)
+
+- [ ] **G1. Streaming contract on `BackendAdapter`.** Add an async-iterator
+  streaming method (e.g. `stream_extract(...) -> AsyncIterator[StreamEvent]`) to the
+  Protocol (`backends/base.py:84-102`) plus a `supports("streaming")` flag
+  (mirrors L104-118). Keep `extract` as the terminal/buffered path. *Exit:* the
+  Protocol defines the streaming signature; `supports("streaming")` is queryable; a
+  non-streaming adapter cleanly reports unsupported; mypy strict clean. **Cite the
+  affected FRs (PRD §6) for the contract change (§7.1).**
+- [ ] **G2. SSE adapters — Claude / OpenAI / Gemini.** Implement SSE delta parsing
+  for the three backends (`claude.py:115`, `openai.py:109`, `gemini.py:125`),
+  assembling the forced tool-use / function-call input incrementally. *Exit:* each
+  adapter's streaming test replays an SSE cassette and yields incremental events
+  whose assembled terminal dict is field-equal to the non-streaming path's result.
+- [ ] **G3. NDJSON adapter — Ollama.** Flip the hardcoded `"stream": False`
+  (`ollama.py:94`) to a streaming path that consumes the `/api/chat` NDJSON chunk
+  sequence and assembles `message.content`. *Exit:* the streaming Ollama test
+  replays an NDJSON cassette; the assembled terminal dict equals the non-streaming
+  result.
+- [ ] **G4. Orchestrator streaming entrypoint + retry parity.** Add a streaming
+  path to `runtime/orchestrator.py` (`run()` L260; retry L302-320) that yields
+  partials but runs Pydantic validation + the single corrective re-extract on the
+  **assembled terminal payload**. *Exit:* a streaming run whose terminal payload
+  validates passes through; one whose terminal payload fails validation retries once
+  then raises `ExtractionFailed`, matching non-streaming semantics exactly.
+
+### Track H — Surface integration + cache/fallback (MEDIUM)
+
+- [ ] **H1. Result-cache interaction.** Populate `_RESULT_CACHE` (`orchestrator.py`
+  lookup L277, store L323) **only** with the terminal validated model after the
+  stream drains; a cache hit replays as an already-complete (non-streaming) result.
+  *Exit:* a streamed extract populates the cache only on completion; an immediate
+  re-run hits cache and returns the full model without re-streaming; an aborted
+  stream leaves no cache entry.
+- [ ] **H2. MCP streaming surface.** Thread streaming through the MCP `extract`
+  tool (`mcp/app.py:118-164`), preserving the `MAX_TEXT_BYTES` guard (L130-131) and
+  `CapturingHook` usage drain (L132-146). *Exit:* an MCP integration test runs a
+  streaming extract; usage `_meta` still drains; oversized input is still rejected
+  pre-call.
+- [ ] **H3. Opt-out + non-streaming fallback.** A disable switch forces the buffered
+  `extract` path; an adapter lacking `supports("streaming")` transparently buffers
+  when routed through the streaming entrypoint. *Exit:* the disable flag forces
+  buffered extract (no stream consumed); a non-streaming adapter routed through the
+  streaming path transparently falls back; no silent capability drop.
+
+### Q4 exit criteria (phase-done, feeds §7 gate)
+
+- [ ] All G* and H* boxes checked; full suite green; coverage ≥ 80%.
+- [ ] mypy strict clean across touched modules.
+- [ ] **§7.1 contract narrowing cited:** the `extract`→async-iterator streaming
+  surface on `BackendAdapter` and all four adapters lists the affected FRs (PRD §6)
+  in the phase PR description.
+- [ ] Streaming and buffered paths return **field-equal terminal payloads**
+  (parity); the determinism contract (`seed`, `system_fingerprint`, `deterministic`
+  on `ExtractResult`) is preserved on the assembled result.
+- [ ] No prompt/response payloads logged below `trace` (RULES.md §8) — stream chunks
+  are payloads; audit the new SSE/NDJSON parsers for leakage.
+- [ ] Cache stores only completed streams; an aborted/partial stream leaves no entry
+  (H1); any streaming cassette wire bodies are redacted before commit (RULES §8).
+
+---
+
 ## 3. Open questions
 
 1. ~~v2 theme: depth vs breadth?~~ **RESOLVED: Mixed** (§1).
