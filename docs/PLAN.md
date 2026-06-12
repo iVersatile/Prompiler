@@ -295,15 +295,15 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
 
 ### Q3 exit criteria (phase-done, feeds §7 gate)
 
-- [ ] All E* and F* boxes checked; full suite green; coverage ≥ 80%.
-- [ ] mypy strict clean across touched modules.
-- [ ] `walk.py` contract unchanged — no new emitter/renderer fired; codegen-IR
+- [x] All E* and F* boxes checked; full suite green; coverage ≥ 80%.
+- [x] mypy strict clean across touched modules.
+- [x] `walk.py` contract unchanged — no new emitter/renderer fired; codegen-IR
   stays un-fired (§3 q5).
-- [ ] `spec_hash` folds over the flattened form (E4); a parent edit invalidates
+- [x] `spec_hash` folds over the flattened form (E4); a parent edit invalidates
   the child's cache key.
-- [ ] No `version: 1` spec silently accepted; every repo example migrated to
+- [x] No `version: 1` spec silently accepted; every repo example migrated to
   `version: 2`.
-- [ ] Field provenance NOT populated (§3 DEFER) — flattener attaches no origin
+- [x] Field provenance NOT populated (§3 DEFER) — flattener attaches no origin
   metadata; revisit only when a consumer needs it.
 
 ---
