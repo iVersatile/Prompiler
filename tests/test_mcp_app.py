@@ -38,7 +38,7 @@ from prompiler.spec import EntitySpec
 _T = TypeVar("_T")
 
 INVOICE_SPEC: dict[str, Any] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "invoice",
     "task": "extract",
     "description": "Extract invoice fields.",
@@ -48,7 +48,7 @@ INVOICE_SPEC: dict[str, Any] = {
 }
 
 RECEIPT_SPEC: dict[str, Any] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "receipt",
     "task": "extract",
     "description": "Extract receipt fields.",
@@ -172,7 +172,7 @@ def test_tool_call_returns_structured_content_and_usage_meta() -> None:
 
 
 _TITLE_SPEC: dict[str, Any] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "doc",
     "task": "extract",
     "fields": [{"name": "title", "type": "string", "required": True}],

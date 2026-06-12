@@ -38,7 +38,7 @@ def _load(data: dict[str, Any]) -> EntitySpec:
 def _invoice_with_constraint(expr: str, severity: str = "error") -> EntitySpec:
     return _load(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "invoice",
             "task": "extract",
             "description": "Invoice with cross-field constraint.",
@@ -73,7 +73,7 @@ def _invoice_with_constraint(expr: str, severity: str = "error") -> EntitySpec:
 def _scalar_pair_spec(expr: str, severity: str = "error") -> EntitySpec:
     return _load(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "pair",
             "task": "extract",
             "description": "Two-number spec.",
@@ -89,7 +89,7 @@ def _scalar_pair_spec(expr: str, severity: str = "error") -> EntitySpec:
 def _triple_spec(expr: str, severity: str = "error") -> EntitySpec:
     return _load(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "triple",
             "task": "extract",
             "description": "Three-number spec.",
@@ -107,7 +107,7 @@ def _triple_spec(expr: str, severity: str = "error") -> EntitySpec:
 def test_spec_without_constraints_validates_normally() -> None:
     spec = _load(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "pair",
             "task": "extract",
             "description": "Two-number spec, no constraints.",
@@ -231,7 +231,7 @@ def test_sum_over_array_projection_equals_scalar() -> None:
 def test_len_of_array_projection() -> None:
     spec = _load(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "tagged",
             "task": "extract",
             "description": "Spec with array of objects.",
@@ -319,7 +319,7 @@ def test_severity_error_does_not_emit_warning_on_pass() -> None:
 def test_multiple_constraints_all_evaluated() -> None:
     spec = _load(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "pair",
             "task": "extract",
             "description": "Pair with two constraints.",

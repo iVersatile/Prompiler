@@ -1,4 +1,4 @@
-spec_version: 1
+spec_version: 2
 name: receipt
 task: extract
 description: Extract structured purchase details from a point-of-sale receipt.

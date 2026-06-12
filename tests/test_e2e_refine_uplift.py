@@ -36,7 +36,7 @@ from prompiler.runtime.registry import Registry
 from prompiler.spec import EntitySpec
 
 _INVOICE_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "invoice",
     "task": "extract",
     "cite": True,
@@ -335,7 +335,7 @@ def test_refine_decline_leaves_prompt_and_f1_at_floor() -> None:
 # iff the refined marker is present in the prompt.
 
 _CONTACT_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "contact",
     "task": "extract",
     "fields": [

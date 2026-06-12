@@ -48,7 +48,7 @@ from prompiler.registry import Registry, discover
 from prompiler.spec import SpecLoadError
 
 INVOICE_SPEC: dict[str, object] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "invoice",
     "task": "extract",
     "description": "Extract invoice fields.",
@@ -58,7 +58,7 @@ INVOICE_SPEC: dict[str, object] = {
 }
 
 RECEIPT_SPEC: dict[str, object] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "receipt",
     "task": "extract",
     "description": "Extract receipt fields.",

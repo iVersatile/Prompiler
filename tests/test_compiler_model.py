@@ -41,7 +41,7 @@ def _load(data: dict[str, Any]) -> EntitySpec:
 
 def _extract_spec(fields: list[dict[str, Any]], name: str = "thing") -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": name,
         "task": "extract",
         "description": "Synthetic extract spec used by synthesiser tests.",
@@ -51,7 +51,7 @@ def _extract_spec(fields: list[dict[str, Any]], name: str = "thing") -> dict[str
 
 def _invoice_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -95,7 +95,7 @@ def _invoice_spec() -> dict[str, Any]:
 
 def _email_category_spec(multi: bool = False) -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Route inbound support email into one routing bucket.",
@@ -126,7 +126,7 @@ def test_synthesize_returns_basemodel_subclass() -> None:
 def test_synthesize_classname_is_pascalcase_of_spec_name() -> None:
     spec = _load(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "email_category_v2",
             "task": "classify",
             "description": "Two-bucket classifier.",

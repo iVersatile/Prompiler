@@ -41,7 +41,7 @@ from prompiler.spec import EntitySpec
 def _build_spec(name: str) -> EntitySpec:
     return EntitySpec.model_validate(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": name,
             "task": "extract",
             "fields": [

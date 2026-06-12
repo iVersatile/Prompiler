@@ -1,4 +1,4 @@
-spec_version: 1
+spec_version: 2
 name: incident_event
 task: extract
 description: Extract structured details of an operational incident from a report.

@@ -26,7 +26,7 @@ def _clear_registry() -> None:
 
 def _clean_extract_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -110,7 +110,7 @@ def test_eval_spec_load_error(
     tmp_path: Path, fixtures_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     bad = _clean_extract_spec()
-    bad["spec_version"] = 2
+    bad["task"] = "bogus"
     spec = _write_yaml(tmp_path / "bad_spec.yaml", bad)
     rc = main(["eval", str(spec), str(fixtures_path), "--backend", "mock"])
     assert rc == 1

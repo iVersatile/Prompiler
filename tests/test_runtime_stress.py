@@ -43,7 +43,7 @@ def _register() -> Registry:
     bundle = compile_spec(
         EntitySpec.model_validate(
             {
-                "spec_version": 1,
+                "spec_version": 2,
                 "name": "doc",
                 "task": "extract",
                 "fields": [

@@ -28,7 +28,7 @@ from prompiler.spec import EntitySpec
 _RETRY_BUDGET: Final[int] = 2
 
 _ICD10_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "icd10_codes",
     "task": "classify",
     "description": "Assign ICD-10 codes that apply to the clinical note.",

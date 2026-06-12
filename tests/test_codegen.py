@@ -33,7 +33,7 @@ from prompiler.spec import EntitySpec, spec_hash
 
 def _extract_spec(**overrides: Any) -> EntitySpec:
     payload: dict[str, Any] = {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -99,7 +99,7 @@ def _extract_spec(**overrides: Any) -> EntitySpec:
 
 def _classify_spec(**overrides: Any) -> EntitySpec:
     payload: dict[str, Any] = {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Route inbound support email into one routing bucket.",

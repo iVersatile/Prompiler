@@ -47,7 +47,7 @@ _RETRY_BUDGET: Final[int] = 2
 def _build_spec() -> EntitySpec:
     return EntitySpec.model_validate(
         {
-            "spec_version": 1,
+            "spec_version": 2,
             "name": "doc",
             "task": "extract",
             "fields": [

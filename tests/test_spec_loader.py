@@ -5,7 +5,7 @@ Covers PRD §5 (spec ingestion) + P1.2 task spec:
   - str path accepted alongside Path
   - missing file -> SpecLoadError with .file set, "not found" in message
   - YAML syntax error -> .line / .column populated (>=1 / >=0)
-  - Pydantic validation error (spec_version: 2) -> .line maps to YAML node line
+  - Pydantic validation error (task: bogus) -> .line maps to YAML node line
   - unknown top-level key rejected
   - extract task without fields rejected
   - empty file rejected
@@ -30,7 +30,7 @@ from prompiler.spec import EntitySpec, SpecLoadError, load_spec
 
 def _invoice_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -65,7 +65,7 @@ def _invoice_spec() -> dict[str, Any]:
 
 def _email_category_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Route inbound support email into one routing bucket.",
@@ -182,12 +182,40 @@ def test_load_spec_sequence_root_rejected(tmp_path: Path) -> None:
 @pytest.mark.unit
 def test_load_spec_pydantic_error_maps_to_line(tmp_path: Path) -> None:
     data = _invoice_spec()
-    data["spec_version"] = 2
-    path = _write_yaml(tmp_path, "bad_version.yaml", data)
+    data["task"] = "bogus"
+    path = _write_yaml(tmp_path, "bad_task.yaml", data)
     with pytest.raises(SpecLoadError) as excinfo:
         load_spec(path)
     err = excinfo.value
     assert err.file == path
+    assert err.line is not None
+    assert err.line >= 1
+
+
+# ---------------------------------------------------------------------------
+# spec_version handling (E1: version 2 is the only supported version)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_load_spec_version_2_succeeds(tmp_path: Path) -> None:
+    data = _invoice_spec()
+    data["spec_version"] = 2
+    path = _write_yaml(tmp_path, "v2.yaml", data)
+    spec = load_spec(path)
+    assert spec.spec_version == 2
+
+
+@pytest.mark.unit
+def test_load_spec_version_1_rejected_points_to_migrate_spec(tmp_path: Path) -> None:
+    data = _invoice_spec()
+    data["spec_version"] = 1
+    path = _write_yaml(tmp_path, "v1.yaml", data)
+    with pytest.raises(SpecLoadError) as excinfo:
+        load_spec(path)
+    err = excinfo.value
+    assert err.file == path
+    assert "migrate-spec" in str(err)
     assert err.line is not None
     assert err.line >= 1
 

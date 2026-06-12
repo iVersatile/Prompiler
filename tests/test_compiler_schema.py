@@ -44,7 +44,7 @@ def _load(data: dict[str, Any]) -> EntitySpec:
 
 def _extract_spec(**overrides: Any) -> EntitySpec:
     base: dict[str, Any] = {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract invoice fields from a scanned receipt.",
@@ -89,7 +89,7 @@ def _extract_spec(**overrides: Any) -> EntitySpec:
 
 def _classify_spec(**overrides: Any) -> EntitySpec:
     base: dict[str, Any] = {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Classify customer email by intent.",

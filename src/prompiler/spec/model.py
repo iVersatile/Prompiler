@@ -99,7 +99,7 @@ class EntitySpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    spec_version: Literal[1]
+    spec_version: Literal[2]
     name: str
     task: Literal["extract", "classify"]
     description: str | None = None

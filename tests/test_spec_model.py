@@ -26,7 +26,7 @@ from prompiler.spec.model import Constraint, EntitySpec, FieldSpec, Label
 
 def _invoice_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -61,7 +61,7 @@ def _invoice_spec() -> dict[str, Any]:
 
 def _email_category_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Route inbound support email into one routing bucket.",
@@ -109,9 +109,17 @@ def test_email_classify_spec_parses() -> None:
 
 
 @pytest.mark.unit
-def test_spec_version_must_be_one() -> None:
+def test_spec_version_two_accepted() -> None:
     data = _invoice_spec()
     data["spec_version"] = 2
+    spec = EntitySpec.model_validate(data)
+    assert spec.spec_version == 2
+
+
+@pytest.mark.unit
+def test_spec_version_one_rejected() -> None:
+    data = _invoice_spec()
+    data["spec_version"] = 1
     with pytest.raises(ValidationError):
         EntitySpec.model_validate(data)
 

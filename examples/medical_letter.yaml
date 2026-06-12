@@ -1,4 +1,4 @@
-spec_version: 1
+spec_version: 2
 name: medical_letter
 task: extract
 description: Extract structured referral details from a clinical referral letter. Operates on synthetic, non-identifying sample text only.

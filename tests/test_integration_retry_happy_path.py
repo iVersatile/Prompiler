@@ -30,7 +30,7 @@ from prompiler.spec import EntitySpec
 _CORRECTIVE_MARKER: Final[str] = "Previous attempt failed validation."
 
 _SUPPORT_TICKET_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "support_ticket",
     "task": "extract",
     "fields": [

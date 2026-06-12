@@ -37,7 +37,7 @@ from prompiler.runtime.registry import Registry
 from prompiler.spec import EntitySpec
 
 _NOTE_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "short_note",
     "task": "extract",
     "fields": [
@@ -47,7 +47,7 @@ _NOTE_SPEC: Final[dict[str, Any]] = {
 }
 
 _TICKET_SPEC: Final[dict[str, Any]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "support_ticket",
     "task": "extract",
     "fields": [

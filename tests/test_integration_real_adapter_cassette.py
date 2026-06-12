@@ -38,7 +38,7 @@ from prompiler.spec import EntitySpec
 _CASSETTES: Final[Path] = Path(__file__).parent / "cassettes"
 
 _ROUTING_SPEC: Final[dict[str, object]] = {
-    "spec_version": 1,
+    "spec_version": 2,
     "name": "routing",
     "task": "extract",
     "fields": [

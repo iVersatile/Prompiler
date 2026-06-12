@@ -43,7 +43,7 @@ from prompiler.spec import EntitySpec, LintIssue, lint_spec
 
 def _clean_invoice_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "invoice",
         "task": "extract",
         "description": "Extract billing details from a single invoice document.",
@@ -87,7 +87,7 @@ def _clean_invoice_spec() -> dict[str, Any]:
 
 def _clean_email_category_spec() -> dict[str, Any]:
     return {
-        "spec_version": 1,
+        "spec_version": 2,
         "name": "email_category",
         "task": "classify",
         "description": "Route inbound support email into one routing bucket.",
