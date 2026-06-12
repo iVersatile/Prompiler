@@ -271,7 +271,7 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
   reference) to `EntitySpec`, preserving `extra="forbid"`. *Exit:* a spec with
   `extends` validates; a malformed `extends` raises `ValueError`; a spec without
   `extends` still loads (field is optional).
-- [ ] **E3. Flatten-before-walk loader pass.** `load_spec` resolves `extends` into
+- [x] **E3. Flatten-before-walk loader pass.** `load_spec` resolves `extends` into
   **one flat `EntitySpec`** before returning — child fields override parent,
   merge order well-defined, inheritance cycles detected. *Exit:* a parent+child
   pair flattens to the expected merged field set; a cycle raises `SpecLoadError`;
