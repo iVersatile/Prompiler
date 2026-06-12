@@ -267,7 +267,7 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
   spec must error with a pointer to `prompiler migrate-spec` (no dual-path
   loader). *Exit:* a `version: 1` spec raises `SpecLoadError` naming
   `migrate-spec`; a `version: 2` spec loads; `extra="forbid"` invariants intact.
-- [ ] **E2. `extends` inheritance field.** Add an optional `extends` (parent spec
+- [x] **E2. `extends` inheritance field.** Add an optional `extends` (parent spec
   reference) to `EntitySpec`, preserving `extra="forbid"`. *Exit:* a spec with
   `extends` validates; a malformed `extends` raises `ValueError`; a spec without
   `extends` still loads (field is optional).
