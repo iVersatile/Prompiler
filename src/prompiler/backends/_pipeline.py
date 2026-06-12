@@ -100,6 +100,41 @@ async def iter_sse_data(
             yield json.loads(data)
 
 
+async def iter_ndjson_data(
+    *,
+    client: httpx.AsyncClient,
+    path: str,
+    payload: dict[str, Any],
+    vendor_label: str,
+    timeout: float | None = None,
+) -> AsyncIterator[dict[str, Any]]:
+    """Stream a POST as newline-delimited JSON, yielding each line's decoded object.
+
+    The NDJSON sibling of ``iter_sse_data`` (Ollama ``/api/chat``): unlike SSE,
+    each line is a complete JSON object with no ``data:`` prefix and no
+    ``[DONE]`` sentinel — the final object carries ``"done": true`` instead.
+    Same 4xx/5xx contract: read the body first, then raise a vendor-prefixed
+    ``HTTPStatusError`` (LL-003). No retry — a partially consumed stream cannot
+    be safely replayed (retry parity is G4).
+    """
+    stream_kwargs: dict[str, Any] = {"json": payload}
+    if timeout is not None:
+        stream_kwargs["timeout"] = timeout
+    async with client.stream("POST", path, **stream_kwargs) as response:
+        if response.status_code >= 400:
+            await response.aread()
+            raise httpx.HTTPStatusError(
+                f"{vendor_label} {response.status_code}: {truncate_for_error(response.text)}",
+                request=response.request,
+                response=response,
+            )
+        async for line in response.aiter_lines():
+            stripped = line.strip()
+            if not stripped:
+                continue
+            yield json.loads(stripped)
+
+
 def truncate_for_error(value: Any, *, limit: int = 200) -> str:
     """Return ``repr(value)`` clamped to ``limit`` chars for error messages."""
     text = repr(value)
