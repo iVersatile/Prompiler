@@ -276,3 +276,110 @@ def test_spec_hash_distinct_across_specs(tmp_path: Path) -> None:
     invoice = _load(tmp_path, "invoice.yaml", _invoice_spec())
     email = _load(tmp_path, "email_category.yaml", _email_category_spec())
     assert spec_hash(invoice) != spec_hash(email)
+
+
+# ---------------------------------------------------------------------------
+# E4: spec_hash digests the loader's flattened (extends-resolved) form
+# ---------------------------------------------------------------------------
+
+
+def _parent_invoice() -> dict[str, Any]:
+    return {
+        "spec_version": 2,
+        "name": "base_invoice",
+        "task": "extract",
+        "description": "Base invoice fields.",
+        "fields": [
+            {"name": "vendor_name", "type": "string", "required": True},
+            {"name": "total_amount", "type": "decimal", "required": True},
+        ],
+    }
+
+
+def _child_invoice(parent_ref: str) -> dict[str, Any]:
+    """Child that inherits the parent description and overrides total_amount."""
+    return {
+        "spec_version": 2,
+        "name": "base_invoice",
+        "task": "extract",
+        "extends": parent_ref,
+        "fields": [
+            {"name": "total_amount", "type": "string", "required": False},
+            {
+                "name": "currency",
+                "type": "enum",
+                "values": ["USD", "EUR"],
+                "required": True,
+            },
+        ],
+    }
+
+
+def _flat_equivalent() -> dict[str, Any]:
+    """Hand-written flat spec matching the flattened child field-for-field.
+
+    Field order mirrors the flattener: parent fields first (with the child's
+    in-place override substituted), then child-only fields appended.
+    """
+    return {
+        "spec_version": 2,
+        "name": "base_invoice",
+        "task": "extract",
+        "description": "Base invoice fields.",
+        "fields": [
+            {"name": "vendor_name", "type": "string", "required": True},
+            {"name": "total_amount", "type": "string", "required": False},
+            {
+                "name": "currency",
+                "type": "enum",
+                "values": ["USD", "EUR"],
+                "required": True,
+            },
+        ],
+    }
+
+
+@pytest.mark.unit
+def test_spec_hash_equal_for_extends_and_flat_equivalent(tmp_path: Path) -> None:
+    """A child resolved via `extends` hashes identically to its flat equivalent."""
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_invoice())
+    child = _load(tmp_path, "child.yaml", _child_invoice("base_invoice"))
+    flat = _load(tmp_path, "flat.yaml", _flat_equivalent())
+    assert spec_hash(child) == spec_hash(flat)
+
+
+@pytest.mark.unit
+def test_spec_hash_changes_when_parent_description_edited(tmp_path: Path) -> None:
+    """Editing the parent the child inherits from MUST change the child's hash."""
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_invoice())
+    h_before = spec_hash(_load(tmp_path, "child.yaml", _child_invoice("base_invoice")))
+
+    edited = _parent_invoice()
+    edited["description"] = "Edited base invoice fields."
+    _write_yaml(tmp_path, "base_invoice.yaml", edited)
+    h_after = spec_hash(_load(tmp_path, "child.yaml", _child_invoice("base_invoice")))
+
+    assert h_before != h_after
+
+
+@pytest.mark.unit
+def test_spec_hash_changes_when_parent_field_edited(tmp_path: Path) -> None:
+    """Editing a parent-only field the child inherits MUST change the child's hash."""
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_invoice())
+    h_before = spec_hash(_load(tmp_path, "child.yaml", _child_invoice("base_invoice")))
+
+    edited = _parent_invoice()
+    edited["fields"][0]["required"] = False
+    _write_yaml(tmp_path, "base_invoice.yaml", edited)
+    h_after = spec_hash(_load(tmp_path, "child.yaml", _child_invoice("base_invoice")))
+
+    assert h_before != h_after
+
+
+@pytest.mark.unit
+def test_spec_hash_carries_no_extends_marker(tmp_path: Path) -> None:
+    """The flattened digest must not retain an `extends` reference (provenance)."""
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_invoice())
+    child = _load(tmp_path, "child.yaml", _child_invoice("base_invoice"))
+    payload = yaml.safe_load(canonical_yaml(child))
+    assert payload.get("extends") is None
