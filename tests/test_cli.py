@@ -35,6 +35,7 @@ import yaml
 
 from prompiler import __version__
 from prompiler.cli import main
+from prompiler.spec.loader import load_spec
 
 
 def _clean_extract_spec() -> dict[str, Any]:
@@ -315,3 +316,78 @@ def test_serve_rejects_non_loopback_without_opt_in(
     assert rc == 2
     err = capsys.readouterr().err
     assert "prompiler serve:" in err
+
+
+def _v1_extract_spec() -> dict[str, Any]:
+    spec = _clean_extract_spec()
+    spec["spec_version"] = 1
+    return spec
+
+
+@pytest.mark.unit
+def test_migrate_spec_v1_becomes_loadable_v2(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    f = _write_yaml(tmp_path / "invoice.yaml", _v1_extract_spec())
+    rc = main(["migrate-spec", str(f)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert str(f) in out
+    spec = load_spec(f)
+    assert spec.spec_version == 2
+
+
+@pytest.mark.unit
+def test_migrate_spec_already_v2_is_noop(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    f = _write_yaml(tmp_path / "invoice.yaml", _clean_extract_spec())
+    before = f.read_text(encoding="utf-8")
+    rc = main(["migrate-spec", str(f)])
+    assert rc == 0
+    assert f.read_text(encoding="utf-8") == before
+    out = capsys.readouterr().out
+    assert "already" in out.lower()
+
+
+@pytest.mark.unit
+def test_migrate_spec_is_idempotent(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    f = _write_yaml(tmp_path / "invoice.yaml", _v1_extract_spec())
+    assert main(["migrate-spec", str(f)]) == 0
+    capsys.readouterr()
+    rc = main(["migrate-spec", str(f)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "already" in out.lower()
+    assert load_spec(f).spec_version == 2
+
+
+@pytest.mark.unit
+def test_migrate_spec_preserves_comments(tmp_path: Path) -> None:
+    body = "# sample invoice spec\n" + yaml.safe_dump(_v1_extract_spec(), sort_keys=False)
+    f = tmp_path / "invoice.yaml"
+    f.write_text(body, encoding="utf-8")
+    rc = main(["migrate-spec", str(f)])
+    assert rc == 0
+    after = f.read_text(encoding="utf-8")
+    assert "# sample invoice spec" in after
+    assert load_spec(f).spec_version == 2
+
+
+@pytest.mark.unit
+def test_migrate_spec_missing_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    missing = tmp_path / "nope.yaml"
+    rc = main(["migrate-spec", str(missing)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "path not found" in err
+
+
+@pytest.mark.unit
+def test_migrate_spec_directory_rejected(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    rc = main(["migrate-spec", str(tmp_path)])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "not a file" in err
