@@ -165,6 +165,41 @@ def test_classify_with_fields_rejected() -> None:
 
 
 # ---------------------------------------------------------------------------
+# extends inheritance reference (E2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_extends_absent_defaults_to_none() -> None:
+    spec = EntitySpec.model_validate(_invoice_spec())
+    assert spec.extends is None
+
+
+@pytest.mark.unit
+def test_extends_string_reference_accepted() -> None:
+    data = _invoice_spec()
+    data["extends"] = "base_invoice"
+    spec = EntitySpec.model_validate(data)
+    assert spec.extends == "base_invoice"
+
+
+@pytest.mark.unit
+def test_extends_empty_string_rejected() -> None:
+    data = _invoice_spec()
+    data["extends"] = ""
+    with pytest.raises(ValidationError):
+        EntitySpec.model_validate(data)
+
+
+@pytest.mark.unit
+def test_extends_whitespace_only_rejected() -> None:
+    data = _invoice_spec()
+    data["extends"] = "   "
+    with pytest.raises(ValidationError):
+        EntitySpec.model_validate(data)
+
+
+# ---------------------------------------------------------------------------
 # FieldSpec per-type invariants
 # ---------------------------------------------------------------------------
 
