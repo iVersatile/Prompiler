@@ -19,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -408,6 +409,25 @@ def _cmd_validate(path: Path) -> int:
 _SPEC_VERSION_LINE_RE = re.compile(r"^(?P<prefix>spec_version:[ \t]*)1\b", re.MULTILINE)
 
 
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write `text` to `path` atomically via a temp file in the same directory.
+
+    A crash or I/O failure mid-write leaves the original `path` untouched rather
+    than a truncated file: the new content is fully written to a sibling temp
+    file, then `os.replace` swaps it into place in a single atomic rename. The
+    temp file is removed on any failure (and is a no-op cleanup on success,
+    since `os.replace` has already renamed it away).
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+        os.replace(tmp_path, path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
 def _cmd_migrate_spec(path: Path) -> int:
     if not path.exists():
         sys.stderr.write(f"prompiler migrate-spec: path not found: {path}\n")
@@ -448,7 +468,11 @@ def _cmd_migrate_spec(path: Path) -> int:
         )
         return 1
 
-    path.write_text(new_text, encoding="utf-8")
+    try:
+        _atomic_write_text(path, new_text)
+    except OSError as exc:
+        sys.stderr.write(f"prompiler migrate-spec: cannot write {path}: {exc}\n")
+        return 2
     sys.stdout.write(f"{path}: migrated spec_version 1 -> 2\n")
     return 0
 
