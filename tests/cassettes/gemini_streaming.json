@@ -1,0 +1,19 @@
+{
+  "interactions": [
+    {
+      "method": "POST",
+      "request_body_b64": "eyJjb250ZW50cyI6IFt7InJvbGUiOiAidXNlciIsICJwYXJ0cyI6IFt7InRleHQiOiAiQ2xhc3NpZnkgdGhlIGZvbGxvd2luZyB0ZXh0IGludG8gb25lIHJvdXRpbmcgYnVja2V0LiJ9XX1dLCAiZ2VuZXJhdGlvbkNvbmZpZyI6IHsidGVtcGVyYXR1cmUiOiAwLjB9LCAidG9vbHMiOiBbeyJmdW5jdGlvbkRlY2xhcmF0aW9ucyI6IFt7Im5hbWUiOiAiZXh0cmFjdCIsICJkZXNjcmlwdGlvbiI6ICJSZXR1cm4gc3RydWN0dXJlZCBkYXRhIG1hdGNoaW5nIHRoZSBwcm92aWRlZCBKU09OIFNjaGVtYS4iLCAicGFyYW1ldGVycyI6IHsidHlwZSI6ICJvYmplY3QiLCAicHJvcGVydGllcyI6IHsibGFiZWwiOiB7InR5cGUiOiAic3RyaW5nIn0sICJyZWFzb24iOiB7InR5cGUiOiAic3RyaW5nIn0sICJub3RlcyI6IHsidHlwZSI6ICJzdHJpbmcifX0sICJyZXF1aXJlZCI6IFsibGFiZWwiLCAicmVhc29uIl19fV19XSwgInRvb2xDb25maWciOiB7ImZ1bmN0aW9uQ2FsbGluZ0NvbmZpZyI6IHsibW9kZSI6ICJBTlkiLCAiYWxsb3dlZEZ1bmN0aW9uTmFtZXMiOiBbImV4dHJhY3QiXX19fQ==",
+      "request_headers": {
+        "content-type": "application/json",
+        "x-goog-api-key": "***REDACTED***"
+      },
+      "response_body_b64": "ZGF0YTogeyJjYW5kaWRhdGVzIjogW3siY29udGVudCI6IHsicm9sZSI6ICJtb2RlbCIsICJwYXJ0cyI6IFt7ImZ1bmN0aW9uQ2FsbCI6IHsibmFtZSI6ICJleHRyYWN0IiwgImFyZ3MiOiB7ImxhYmVsIjogInN1cHBvcnQiLCAicmVhc29uIjogInVzZXIgcmVxdWVzdHMgaHVtYW4gYXNzaXN0YW5jZSJ9fX1dfSwgImluZGV4IjogMH1dfQoKZGF0YTogeyJjYW5kaWRhdGVzIjogW3siY29udGVudCI6IHsicm9sZSI6ICJtb2RlbCIsICJwYXJ0cyI6IFtdfSwgImZpbmlzaFJlYXNvbiI6ICJTVE9QIiwgImluZGV4IjogMH1dLCAidXNhZ2VNZXRhZGF0YSI6IHsicHJvbXB0VG9rZW5Db3VudCI6IDEwMCwgImNhbmRpZGF0ZXNUb2tlbkNvdW50IjogNTAsICJ0b3RhbFRva2VuQ291bnQiOiAxNTB9fQoK",
+      "response_headers": {
+        "content-type": "text/event-stream"
+      },
+      "status": 200,
+      "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse"
+    }
+  ],
+  "version": 1
+}

@@ -76,7 +76,8 @@ async def iter_sse_data(
     the same vendor-prefixed ``HTTPStatusError`` on 4xx/5xx (LL-003, reading the
     body first so the message carries it), then yield one decoded dict per
     non-empty ``data:`` line. ``event:`` and blank framing lines fall through the
-    ``data:`` guard. No retry: a partially-consumed stream cannot be safely
+    ``data:`` guard, and the OpenAI ``[DONE]`` sentinel is skipped (it is a bare
+    marker, not JSON). No retry: a partially-consumed stream cannot be safely
     replayed — retry parity is deferred to G4.
     """
     stream_kwargs: dict[str, Any] = {"json": payload}
@@ -94,7 +95,7 @@ async def iter_sse_data(
             if not line.startswith("data:"):
                 continue
             data = line[len("data:") :].strip()
-            if not data:
+            if not data or data == "[DONE]":
                 continue
             yield json.loads(data)
 

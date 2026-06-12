@@ -17,13 +17,15 @@ from __future__ import annotations
 
 import base64
 import copy
-from collections.abc import Sequence
+import json
+import time
+from collections.abc import AsyncIterator, Sequence
 from typing import Any, cast
 
 import httpx
 
-from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import ExtractResult, ModalContent
+from prompiler.backends._pipeline import iter_sse_data, post_with_retry, truncate_for_error
+from prompiler.backends.base import ExtractResult, ModalContent, StreamEvent
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -201,8 +203,104 @@ class GeminiAdapter:
             f"{truncate_for_error(body)}"
         )
 
+    async def stream_extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+        temperature: float = 0.0,
+        seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream the same extract as ``extract`` over ``:streamGenerateContent?alt=sse``.
+
+        Decodes the SSE wire log via ``iter_sse_data``; each chunk's
+        ``functionCall.args`` is a complete dict that is merged into the
+        accumulator (Gemini emits whole dicts, not string fragments) and
+        re-emitted as a non-terminal ``StreamEvent``. Usage is captured from
+        ``usageMetadata``. Gemini has no ``[DONE]`` sentinel. No retry — a
+        partially consumed stream cannot be safely replayed (G4).
+        """
+        parts: list[dict[str, Any]] = [{"text": prompt}]
+        for part in modal_parts:
+            parts.append(
+                {
+                    "inlineData": {
+                        "mimeType": part.media_type,
+                        "data": base64.b64encode(part.data).decode("ascii"),
+                    }
+                }
+            )
+        payload: dict[str, Any] = {
+            "contents": [{"role": "user", "parts": parts}],
+            "generationConfig": {"temperature": temperature},
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": EXTRACT_TOOL_NAME,
+                            "description": EXTRACT_TOOL_DESCRIPTION,
+                            "parameters": self.to_tool_schema(json_schema),
+                        }
+                    ]
+                }
+            ],
+            "toolConfig": {
+                "functionCallingConfig": {
+                    "mode": "ANY",
+                    "allowedFunctionNames": [EXTRACT_TOOL_NAME],
+                }
+            },
+        }
+        accumulator: dict[str, Any] = {}
+        prompt_tokens = 0
+        completion_tokens = 0
+        started = time.perf_counter()
+        async for frame in iter_sse_data(
+            client=self._client,
+            path=f"/v1beta/models/{self._model}:streamGenerateContent?alt=sse",
+            payload=payload,
+            vendor_label="Gemini",
+            timeout=timeout,
+        ):
+            usage = frame.get("usageMetadata")
+            if isinstance(usage, dict):
+                prompt_tokens = int(usage.get("promptTokenCount", 0))
+                completion_tokens = int(usage.get("candidatesTokenCount", 0))
+            for candidate in frame.get("candidates") or []:
+                content = candidate.get("content") or {}
+                for part in content.get("parts") or []:
+                    function_call = part.get("functionCall")
+                    if not isinstance(function_call, dict):
+                        continue
+                    if function_call.get("name") != EXTRACT_TOOL_NAME:
+                        continue
+                    args = function_call.get("args")
+                    if isinstance(args, dict):
+                        accumulator.update(args)
+                        yield StreamEvent(delta=json.dumps(args))
+        latency = time.perf_counter() - started
+        await emit_call_metrics(
+            hook=self._observability,
+            backend="gemini",
+            model=self._model,
+            latency_seconds=latency,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self._pricing,
+        )
+        yield StreamEvent(
+            delta="",
+            result=ExtractResult(
+                data=accumulator,
+                system_fingerprint=None,
+                deterministic=False,
+            ),
+        )
+
     def supports(self, feature: str) -> bool:
-        return feature == "multimodal"
+        return feature in {"multimodal", "streaming"}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return cast("dict[str, Any]", _project_gemini(json_schema, depth=1))
