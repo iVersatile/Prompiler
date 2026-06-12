@@ -241,6 +241,205 @@ def test_load_spec_extract_without_fields_rejected(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# extends resolution / flatten-before-walk (E3)
+# ---------------------------------------------------------------------------
+
+
+def _parent_extract() -> dict[str, Any]:
+    return {
+        "spec_version": 2,
+        "name": "base_invoice",
+        "task": "extract",
+        "description": "Base invoice fields.",
+        "fields": [
+            {"name": "vendor_name", "type": "string", "required": True},
+            {"name": "total_amount", "type": "decimal", "required": True},
+        ],
+    }
+
+
+def _child_extract(parent_ref: str) -> dict[str, Any]:
+    return {
+        "spec_version": 2,
+        "name": "child_invoice",
+        "task": "extract",
+        "extends": parent_ref,
+        "fields": [
+            {"name": "total_amount", "type": "string", "required": False},
+            {"name": "currency", "type": "enum", "values": ["USD", "EUR"], "required": True},
+        ],
+    }
+
+
+@pytest.mark.unit
+def test_load_spec_extends_merges_fields_by_name(tmp_path: Path) -> None:
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_extract())
+    child = _write_yaml(tmp_path, "child_invoice.yaml", _child_extract("base_invoice"))
+    spec = load_spec(child)
+    assert spec.fields is not None
+    assert [f.name for f in spec.fields] == ["vendor_name", "total_amount", "currency"]
+    total = next(f for f in spec.fields if f.name == "total_amount")
+    assert total.type == "string"
+    assert total.required is False
+
+
+@pytest.mark.unit
+def test_load_spec_extends_explicit_suffix_resolves(tmp_path: Path) -> None:
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_extract())
+    child = _write_yaml(tmp_path, "child_invoice.yaml", _child_extract("base_invoice.yaml"))
+    spec = load_spec(child)
+    assert spec.fields is not None
+    assert [f.name for f in spec.fields] == ["vendor_name", "total_amount", "currency"]
+
+
+@pytest.mark.unit
+def test_load_spec_extends_inherits_fields_when_child_omits(tmp_path: Path) -> None:
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_extract())
+    child_data = {
+        "spec_version": 2,
+        "name": "child_invoice",
+        "task": "extract",
+        "extends": "base_invoice",
+    }
+    child = _write_yaml(tmp_path, "child_invoice.yaml", child_data)
+    spec = load_spec(child)
+    assert spec.fields is not None
+    assert [f.name for f in spec.fields] == ["vendor_name", "total_amount"]
+
+
+@pytest.mark.unit
+def test_load_spec_extends_child_overrides_scalar(tmp_path: Path) -> None:
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_extract())
+    child_data = _child_extract("base_invoice")
+    child_data["description"] = "Child override description."
+    child = _write_yaml(tmp_path, "child_invoice.yaml", child_data)
+    spec = load_spec(child)
+    assert spec.description == "Child override description."
+
+
+@pytest.mark.unit
+def test_load_spec_extends_inherits_scalar_when_child_omits(tmp_path: Path) -> None:
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_extract())
+    child = _write_yaml(tmp_path, "child_invoice.yaml", _child_extract("base_invoice"))
+    spec = load_spec(child)
+    assert spec.description == "Base invoice fields."
+
+
+@pytest.mark.unit
+def test_load_spec_flattened_drops_extends(tmp_path: Path) -> None:
+    _write_yaml(tmp_path, "base_invoice.yaml", _parent_extract())
+    child = _write_yaml(tmp_path, "child_invoice.yaml", _child_extract("base_invoice"))
+    spec = load_spec(child)
+    assert spec.extends is None
+
+
+@pytest.mark.unit
+def test_load_spec_extends_multi_level_chain(tmp_path: Path) -> None:
+    gp = {
+        "spec_version": 2,
+        "name": "gp",
+        "task": "extract",
+        "fields": [{"name": "a", "type": "string", "required": True}],
+    }
+    p = {
+        "spec_version": 2,
+        "name": "p",
+        "task": "extract",
+        "extends": "gp",
+        "fields": [{"name": "b", "type": "string", "required": True}],
+    }
+    c = {
+        "spec_version": 2,
+        "name": "c",
+        "task": "extract",
+        "extends": "p",
+        "fields": [{"name": "c", "type": "string", "required": True}],
+    }
+    _write_yaml(tmp_path, "gp.yaml", gp)
+    _write_yaml(tmp_path, "p.yaml", p)
+    child = _write_yaml(tmp_path, "c.yaml", c)
+    spec = load_spec(child)
+    assert spec.fields is not None
+    assert [f.name for f in spec.fields] == ["a", "b", "c"]
+
+
+@pytest.mark.unit
+def test_load_spec_extends_labels_merge_by_name(tmp_path: Path) -> None:
+    parent = {
+        "spec_version": 2,
+        "name": "base_cat",
+        "task": "classify",
+        "labels": [
+            {"name": "billing", "description": "Payments."},
+            {"name": "technical", "description": "Broken."},
+        ],
+    }
+    child = {
+        "spec_version": 2,
+        "name": "child_cat",
+        "task": "classify",
+        "extends": "base_cat",
+        "labels": [
+            {"name": "technical", "description": "Product not working."},
+            {"name": "sales", "description": "Pre-purchase."},
+        ],
+    }
+    _write_yaml(tmp_path, "base_cat.yaml", parent)
+    child_path = _write_yaml(tmp_path, "child_cat.yaml", child)
+    spec = load_spec(child_path)
+    assert spec.labels is not None
+    assert [lbl.name for lbl in spec.labels] == ["billing", "technical", "sales"]
+    tech = next(lbl for lbl in spec.labels if lbl.name == "technical")
+    assert tech.description == "Product not working."
+
+
+@pytest.mark.unit
+def test_load_spec_extends_missing_parent_errors(tmp_path: Path) -> None:
+    child = _write_yaml(tmp_path, "child_invoice.yaml", _child_extract("ghost_parent"))
+    with pytest.raises(SpecLoadError) as excinfo:
+        load_spec(child)
+    assert "not found" in str(excinfo.value).lower()
+
+
+@pytest.mark.unit
+def test_load_spec_extends_cycle_detected(tmp_path: Path) -> None:
+    a = {
+        "spec_version": 2,
+        "name": "a",
+        "task": "extract",
+        "extends": "b",
+        "fields": [{"name": "a", "type": "string", "required": True}],
+    }
+    b = {
+        "spec_version": 2,
+        "name": "b",
+        "task": "extract",
+        "extends": "a",
+        "fields": [{"name": "b", "type": "string", "required": True}],
+    }
+    _write_yaml(tmp_path, "b.yaml", b)
+    a_path = _write_yaml(tmp_path, "a.yaml", a)
+    with pytest.raises(SpecLoadError) as excinfo:
+        load_spec(a_path)
+    assert "cycle" in str(excinfo.value).lower()
+
+
+@pytest.mark.unit
+def test_load_spec_extends_self_cycle_detected(tmp_path: Path) -> None:
+    a = {
+        "spec_version": 2,
+        "name": "a",
+        "task": "extract",
+        "extends": "a",
+        "fields": [{"name": "a", "type": "string", "required": True}],
+    }
+    a_path = _write_yaml(tmp_path, "a.yaml", a)
+    with pytest.raises(SpecLoadError) as excinfo:
+        load_spec(a_path)
+    assert "cycle" in str(excinfo.value).lower()
+
+
+# ---------------------------------------------------------------------------
 # Error rendering
 # ---------------------------------------------------------------------------
 

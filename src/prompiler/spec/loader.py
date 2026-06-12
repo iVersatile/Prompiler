@@ -88,15 +88,12 @@ def _lookup_loc(raw: Any, loc: tuple[Any, ...]) -> tuple[int | None, int | None]
     return line, column
 
 
-def load_spec(path: Path | str) -> EntitySpec:
-    """Load and validate an EntitySpec from a YAML file.
+def _load_raw(p: Path) -> dict[str, Any]:
+    """Read one spec file to a mark-annotated mapping; no `extends` resolution.
 
-    Raises SpecLoadError with `.file` / `.line` / `.column` populated when the
-    file is missing, syntactically invalid, semantically invalid against the
-    Pydantic model, or has the wrong root shape.
+    Performs the IO/parse/root-shape/version-1 checks for a single file and
+    returns the raw mapping with `__line__`/`__column__` marks intact.
     """
-    p = Path(path)
-
     if not p.exists():
         raise SpecLoadError(file=p, message=f"spec file not found: {p}")
 
@@ -146,10 +143,108 @@ def load_spec(path: Path | str) -> EntitySpec:
             column=v1_col,
         )
 
-    clean = _strip_marks(raw)
+    return raw
+
+
+def _resolve_parent_path(child_path: Path, extends_ref: str) -> Path:
+    """Resolve a parent `extends` reference relative to the child's directory.
+
+    Bare references gain a `.yaml` suffix; absolute references are used as-is.
+    """
+    ref = Path(extends_ref)
+    if ref.suffix == "":
+        ref = ref.with_suffix(".yaml")
+    if ref.is_absolute():
+        return ref
+    return child_path.parent / ref
+
+
+def _merge_named_list(parent_items: list[Any], child_items: list[Any]) -> list[Any]:
+    """Merge two lists keyed by each item's `name`.
+
+    A child item replaces the same-named parent item in the parent's position;
+    unmatched child items are appended after; nameless items pass through.
+    """
+    child_by_name = {
+        item["name"]: item
+        for item in child_items
+        if isinstance(item, dict) and isinstance(item.get("name"), str)
+    }
+    consumed: set[str] = set()
+    result: list[Any] = []
+    for item in parent_items:
+        name = item.get("name") if isinstance(item, dict) else None
+        if isinstance(name, str) and name in child_by_name:
+            result.append(child_by_name[name])
+            consumed.add(name)
+        else:
+            result.append(item)
+    for item in child_items:
+        name = item.get("name") if isinstance(item, dict) else None
+        if isinstance(name, str) and name in consumed:
+            continue
+        result.append(item)
+    return result
+
+
+def _merge(parent: dict[str, Any], child: dict[str, Any]) -> dict[str, Any]:
+    """Overlay `child` onto `parent`, merging `fields`/`labels` by name."""
+    merged = dict(parent)
+    for key, value in child.items():
+        existing = merged.get(key)
+        if key in ("fields", "labels") and isinstance(value, list) and isinstance(existing, list):
+            merged[key] = _merge_named_list(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _flatten(path: Path, raw: dict[str, Any], seen: frozenset[Path]) -> dict[str, Any]:
+    """Recursively resolve `extends` into a single mark-free mapping.
+
+    Detects inheritance cycles via resolved paths and strips the `extends` key
+    from the result so the flattened spec is self-contained.
+    """
+    resolved = path.resolve()
+    if resolved in seen:
+        loc_line, loc_col = _lookup_loc(raw, ("extends",))
+        c_line: int = loc_line if loc_line is not None else raw.get(_LINE_KEY, 1)
+        c_col: int = loc_col if loc_col is not None else raw.get(_COL_KEY, 0)
+        raise SpecLoadError(
+            file=path,
+            message=f"extends cycle detected at {path}",
+            line=c_line,
+            column=c_col,
+        )
+
+    clean = cast("dict[str, Any]", _strip_marks(raw))
+    extends_ref = clean.get("extends")
+    if not isinstance(extends_ref, str) or not extends_ref.strip():
+        return clean
+
+    parent_path = _resolve_parent_path(path, extends_ref)
+    parent_raw = _load_raw(parent_path)
+    parent_flat = _flatten(parent_path, parent_raw, seen | {resolved})
+    merged = _merge(parent_flat, clean)
+    merged.pop("extends", None)
+    return merged
+
+
+def load_spec(path: Path | str) -> EntitySpec:
+    """Load, flatten (resolve `extends`), and validate an EntitySpec.
+
+    Raises SpecLoadError with `.file` / `.line` / `.column` populated when the
+    file is missing, syntactically invalid, semantically invalid against the
+    Pydantic model, has the wrong root shape, or has an unresolvable/cyclic
+    `extends` chain. The returned spec is flattened: `extends` is resolved into
+    one self-contained mapping before validation.
+    """
+    p = Path(path)
+    raw = _load_raw(p)
+    flattened = _flatten(p, raw, frozenset())
 
     try:
-        return EntitySpec.model_validate(clean)
+        return EntitySpec.model_validate(flattened)
     except ValidationError as exc:
         err = exc.errors()[0]
         loc = tuple(err["loc"])
