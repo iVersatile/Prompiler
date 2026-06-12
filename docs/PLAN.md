@@ -358,17 +358,17 @@ PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
   Protocol defines the streaming signature; `supports("streaming")` is queryable; a
   non-streaming adapter cleanly reports unsupported; mypy strict clean. **Cite the
   affected FRs (PRD §6) for the contract change (§7.1).**
-- [ ] **G2. SSE adapters — Claude / OpenAI / Gemini.** Implement SSE delta parsing
+- [x] **G2. SSE adapters — Claude / OpenAI / Gemini.** Implement SSE delta parsing
   for the three backends (`claude.py:115`, `openai.py:109`, `gemini.py:125`),
   assembling the forced tool-use / function-call input incrementally. *Exit:* each
   adapter's streaming test replays an SSE cassette and yields incremental events
   whose assembled terminal dict is field-equal to the non-streaming path's result.
-- [ ] **G3. NDJSON adapter — Ollama.** Flip the hardcoded `"stream": False`
+- [x] **G3. NDJSON adapter — Ollama.** Flip the hardcoded `"stream": False`
   (`ollama.py:94`) to a streaming path that consumes the `/api/chat` NDJSON chunk
   sequence and assembles `message.content`. *Exit:* the streaming Ollama test
   replays an NDJSON cassette; the assembled terminal dict equals the non-streaming
   result.
-- [ ] **G4. Orchestrator streaming entrypoint + retry parity.** Add a streaming
+- [x] **G4. Orchestrator streaming entrypoint + retry parity.** Add a streaming
   path to `runtime/orchestrator.py` (`run()` L260; retry L302-320) that yields
   partials but runs Pydantic validation + the single corrective re-extract on the
   **assembled terminal payload**. *Exit:* a streaming run whose terminal payload
