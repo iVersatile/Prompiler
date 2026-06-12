@@ -18,13 +18,14 @@ from __future__ import annotations
 import base64
 import copy
 import json
-from collections.abc import Sequence
+import time
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import httpx
 
-from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
+from prompiler.backends._pipeline import iter_sse_data, post_with_retry, truncate_for_error
+from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent, StreamEvent
 from prompiler.backends.credentials import CredentialError, CredentialProvider
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
@@ -184,8 +185,104 @@ class OpenAIAdapter:
             f"{truncate_for_error(body)}"
         )
 
+    async def stream_extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+        temperature: float = 0.0,
+        seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream the same extract as ``extract``, yielding deltas then a terminal event.
+
+        Drives ``/v1/chat/completions`` with ``"stream": True`` and decodes the
+        ``chat.completion.chunk`` SSE wire log via ``iter_sse_data``: each
+        ``choices[].delta.tool_calls[].function.arguments`` fragment is re-emitted
+        as a non-terminal ``StreamEvent`` and accumulated (the opening chunk's
+        empty ``arguments`` is skipped). ``json.loads`` of the assembled fragments
+        yields the same payload buffered ``extract`` returns, surfaced in one
+        terminal ``StreamEvent``. Usage is captured from the final ``choices: []``
+        chunk (``stream_options.include_usage``) for metric parity. No retry — a
+        partially consumed stream cannot be safely replayed (G4).
+        """
+        content = _build_content(prompt, modal_parts)
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": [{"role": "user", "content": content}],
+            "temperature": temperature,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "tools": [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": EXTRACT_TOOL_NAME,
+                        "description": EXTRACT_TOOL_DESCRIPTION,
+                        "parameters": json_schema,
+                    },
+                }
+            ],
+            "tool_choice": {
+                "type": "function",
+                "function": {"name": EXTRACT_TOOL_NAME},
+            },
+        }
+        if seed is not None:
+            payload["seed"] = seed
+
+        fragments: list[str] = []
+        prompt_tokens = 0
+        completion_tokens = 0
+        fingerprint: str | None = None
+        started = time.perf_counter()
+        async for frame in iter_sse_data(
+            client=self._client,
+            path="/v1/chat/completions",
+            payload=payload,
+            vendor_label="OpenAI",
+            timeout=timeout,
+        ):
+            fp = frame.get("system_fingerprint")
+            if isinstance(fp, str):
+                fingerprint = fp
+            usage = frame.get("usage")
+            if isinstance(usage, dict):
+                prompt_tokens = int(usage.get("prompt_tokens", 0))
+                completion_tokens = int(usage.get("completion_tokens", 0))
+            for choice in frame.get("choices") or []:
+                delta = choice.get("delta") or {}
+                for tool_call in delta.get("tool_calls") or []:
+                    function = tool_call.get("function") or {}
+                    arguments = function.get("arguments")
+                    if not isinstance(arguments, str) or arguments == "":
+                        continue
+                    fragments.append(arguments)
+                    yield StreamEvent(delta=arguments)
+        latency = time.perf_counter() - started
+
+        data = json.loads("".join(fragments))
+        await emit_call_metrics(
+            hook=self._observability,
+            backend="openai",
+            model=self._model,
+            latency_seconds=latency,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self._pricing,
+        )
+        yield StreamEvent(
+            delta="",
+            result=ExtractResult(
+                data=data,
+                system_fingerprint=fingerprint,
+                deterministic=seed is not None,
+            ),
+        )
+
     def supports(self, feature: str) -> bool:
-        return feature in {"seed", "multimodal"}
+        return feature in {"seed", "multimodal", "streaming"}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

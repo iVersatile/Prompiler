@@ -12,9 +12,9 @@ The streaming contract adds two symbols to ``prompiler.backends.base``:
     final ``ExtractResult`` (``result is not None`` ⇔ terminal).
   * ``StreamingBackendAdapter`` — a ``@runtime_checkable`` Protocol that extends
     ``BackendAdapter`` with ``stream_extract``. Adapters opt in individually:
-    Claude streams in G2 (satisfies ``StreamingBackendAdapter`` and reports
-    ``supports('streaming') is True``), while OpenAI, Gemini, and Ollama remain
-    buffered-only — they keep satisfying ``BackendAdapter`` and report
+    Claude, OpenAI, and Gemini stream in G2 (satisfy ``StreamingBackendAdapter``
+    and report ``supports('streaming') is True``), while Ollama remains
+    buffered-only — it keeps satisfying ``BackendAdapter`` and reports
     ``supports('streaming') is False`` via the unknown-feature default.
 
 No network: the real-adapter checks build a bare ``httpx.AsyncClient`` and only
@@ -45,14 +45,12 @@ from prompiler.backends import (
 )
 from prompiler.backends.mock import MockAdapter
 
-STREAMING_ADAPTER_CLASSES = [ClaudeAdapter]
+STREAMING_ADAPTER_CLASSES = [ClaudeAdapter, OpenAIAdapter, GeminiAdapter]
 NON_STREAMING_ADAPTER_CLASSES = [
     MockAdapter,
-    OpenAIAdapter,
-    GeminiAdapter,
     OllamaAdapter,
 ]
-NON_STREAMING_REAL_ADAPTER_CLASSES = [OpenAIAdapter, GeminiAdapter, OllamaAdapter]
+NON_STREAMING_REAL_ADAPTER_CLASSES = [OllamaAdapter]
 
 
 def _terminal_result() -> ExtractResult:
