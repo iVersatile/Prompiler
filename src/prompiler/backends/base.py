@@ -26,7 +26,7 @@ tests cover behaviour.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -81,6 +81,33 @@ class ExtractResult:
     deterministic: bool
 
 
+@dataclass(frozen=True)
+class StreamEvent:
+    """One incremental chunk of a streaming extract, or the terminal result.
+
+    A stream is a sequence of ``StreamEvent``s: zero or more *delta* events
+    carrying raw output fragments, then exactly one *terminal* event whose
+    ``result`` holds the assembled, schema-conforming ``ExtractResult``. The two
+    are distinguished solely by ``result``:
+
+      * ``result is None`` — a non-terminal delta. ``delta`` carries the new
+        fragment of vendor output (typically partial JSON text).
+      * ``result is not None`` — the terminal event. ``delta`` is usually empty;
+        ``result`` is the same ``ExtractResult`` a buffered ``extract`` would
+        have returned, so streaming and buffered callers converge on one type.
+
+    Frozen so an event cannot mutate after an adapter yields it to a consumer.
+    """
+
+    delta: str
+    result: ExtractResult | None = None
+
+    @property
+    def is_terminal(self) -> bool:
+        """True iff this event carries the final ``ExtractResult``."""
+        return self.result is not None
+
+
 @runtime_checkable
 class BackendAdapter(Protocol):
     """Vendor-agnostic JSON extraction contract.
@@ -112,6 +139,9 @@ class BackendAdapter(Protocol):
           * ``"multimodal"`` — every adapter returns True at the image
             baseline; audio is Gemini-only and a non-Gemini adapter handed an
             audio part raises ``CapabilityError`` rather than reporting False.
+          * ``"streaming"`` — True only for adapters that also satisfy
+            ``StreamingBackendAdapter`` (expose ``stream_extract``). Adapters
+            without a streaming path fall through to the default below.
 
         Unknown features return False.
         """
@@ -130,3 +160,32 @@ class BackendAdapter(Protocol):
         it without aliasing the input.
         """
         ...
+
+
+@runtime_checkable
+class StreamingBackendAdapter(BackendAdapter, Protocol):
+    """A ``BackendAdapter`` that can also stream its extract incrementally.
+
+    Extends the buffered contract with ``stream_extract``, which returns an
+    async iterator of ``StreamEvent``s (deltas, then one terminal event whose
+    ``result`` is the final ``ExtractResult``). Kept as a *separate* Protocol so
+    existing adapters keep satisfying ``BackendAdapter`` unchanged; only
+    adapters that opt in (and report ``supports('streaming') is True``)
+    structurally satisfy this one.
+
+    ``stream_extract`` is declared with a plain ``def`` returning
+    ``AsyncIterator[StreamEvent]`` — an ``async def`` body that ``yield``s
+    structurally matches this, because calling such a function returns the
+    iterator synchronously rather than awaiting a coroutine.
+    """
+
+    def stream_extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+        temperature: float = 0.0,
+        seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
+    ) -> AsyncIterator[StreamEvent]: ...
