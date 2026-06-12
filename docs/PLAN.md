@@ -276,7 +276,7 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
   merge order well-defined, inheritance cycles detected. *Exit:* a parent+child
   pair flattens to the expected merged field set; a cycle raises `SpecLoadError`;
   `walk.py` runs unchanged on the flattened spec (no walk edits).
-- [ ] **E4. spec_hash over the flattened form.** Confirm `spec_hash` digests the
+- [x] **E4. spec_hash over the flattened form.** Confirm `spec_hash` digests the
   loader's flattened output so cache keys track parent changes (resolves §3 q3 =
   YES). *Exit:* editing a parent changes the child's `spec_hash`; two specs that
   flatten field-equal share a hash. **No field provenance metadata** (§3 q —
