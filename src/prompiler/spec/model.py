@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 FieldType = Literal[
     "string",
@@ -101,6 +101,7 @@ class EntitySpec(BaseModel):
 
     spec_version: Literal[2]
     name: str
+    extends: str | None = None
     task: Literal["extract", "classify"]
     description: str | None = None
     cite: bool = False
@@ -110,6 +111,13 @@ class EntitySpec(BaseModel):
     allow_multi_label: bool = False
     max_input_tokens: int | None = Field(default=None, ge=1)
     input_modalities: list[InputModality] = Field(default_factory=lambda: list(_DEFAULT_MODALITIES))
+
+    @field_validator("extends")
+    @classmethod
+    def _check_extends_nonempty(cls, v: str | None) -> str | None:
+        if v is not None and not v.strip():
+            raise ValueError("`extends` must be a non-empty spec reference")
+        return v
 
     @model_validator(mode="after")
     def _check_input_modalities(self) -> EntitySpec:
