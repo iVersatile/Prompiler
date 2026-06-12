@@ -115,8 +115,12 @@ class EntitySpec(BaseModel):
     @field_validator("extends")
     @classmethod
     def _check_extends_nonempty(cls, v: str | None) -> str | None:
-        if v is not None and not v.strip():
+        if v is None:
+            return v
+        if not v.strip():
             raise ValueError("`extends` must be a non-empty spec reference")
+        if v != v.strip():
+            raise ValueError("`extends` must not have leading or trailing whitespace")
         return v
 
     @model_validator(mode="after")

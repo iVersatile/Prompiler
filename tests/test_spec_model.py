@@ -199,6 +199,14 @@ def test_extends_whitespace_only_rejected() -> None:
         EntitySpec.model_validate(data)
 
 
+@pytest.mark.unit
+def test_extends_padded_with_whitespace_rejected() -> None:
+    data = _invoice_spec()
+    data["extends"] = " base_invoice "
+    with pytest.raises(ValidationError):
+        EntitySpec.model_validate(data)
+
+
 # ---------------------------------------------------------------------------
 # FieldSpec per-type invariants
 # ---------------------------------------------------------------------------
