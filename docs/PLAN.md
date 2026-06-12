@@ -377,7 +377,7 @@ PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
 
 ### Track H — Surface integration + cache/fallback (MEDIUM)
 
-- [ ] **H1. Result-cache interaction.** Populate `_RESULT_CACHE` (`orchestrator.py`
+- [x] **H1. Result-cache interaction.** Populate `_RESULT_CACHE` (`orchestrator.py`
   lookup L277, store L323) **only** with the terminal validated model after the
   stream drains; a cache hit replays as an already-complete (non-streaming) result.
   *Exit:* a streamed extract populates the cache only on completion; an immediate
