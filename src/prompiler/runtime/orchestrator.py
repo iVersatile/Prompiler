@@ -44,7 +44,7 @@ import asyncio
 import hashlib
 import os
 import tomllib
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -52,7 +52,13 @@ from typing import Any, Final
 from pydantic import BaseModel, ValidationError
 
 from prompiler import obs
-from prompiler.backends.base import BackendAdapter, ExtractResult, ModalContent
+from prompiler.backends.base import (
+    BackendAdapter,
+    ExtractResult,
+    ModalContent,
+    StreamEvent,
+    StreamingBackendAdapter,
+)
 from prompiler.runtime.errors import ExtractionFailed
 from prompiler.runtime.registry import Registry, _resolve
 
@@ -61,6 +67,7 @@ __all__ = [
     "result_cache_info",
     "run",
     "run_batch",
+    "run_stream",
     "run_sync",
 ]
 
@@ -322,6 +329,90 @@ async def run(
     if not cache_disabled:
         _RESULT_CACHE[cache_key] = validated
     return validated
+
+
+async def run_stream(
+    name: str,
+    text: str,
+    *,
+    backend: StreamingBackendAdapter,
+    registry: Registry | None = None,
+    timeout: float | None = None,
+    temperature: float | _Unset = _UNSET,
+    seed: int | None | _Unset = _UNSET,
+    modal_parts: Sequence[ModalContent] = (),
+) -> AsyncIterator[StreamEvent | BaseModel]:
+    """Streaming sibling of :func:`run` (PLAN.md §2.4 G4).
+
+    Yields each non-terminal ``StreamEvent`` (incremental deltas) as it arrives,
+    then a single validated ``BaseModel`` as the final item. The adapter's
+    terminal ``StreamEvent`` is consumed internally — its assembled payload runs
+    through the *same* ``model_validate`` + single corrective re-extract as
+    :func:`run`, and the validated instance is yielded in its place (the terminal
+    event itself is never re-yielded). Validation parity is exact: a terminal
+    payload that validates passes through; one that fails retries once with the
+    corrective-feedback prompt (whose deltas also stream) then raises
+    ``ExtractionFailed from second_err``.
+
+    The result cache is deliberately bypassed: a partial stream is observable to
+    the caller, so there is no buffered value to memoize and no key to look up
+    (Track H1 owns any future streaming/cache interaction).
+    """
+    bundle = _resolve(registry).get(name)
+    block = _read_prompiler_block()
+
+    _check_doc_size(text, bundle.max_input_tokens)
+
+    resolved_temperature = _resolve_temperature(temperature, block)
+    resolved_seed = _resolve_seed(seed, block)
+    _warn_if_nondeterministic(backend)
+
+    json_schema = bundle.pydantic_cls.model_json_schema()
+    prompt = _assemble_prompt(bundle.prompt, text)
+
+    terminal: ExtractResult | None = None
+
+    async def _attempt(attempt_prompt: str) -> AsyncIterator[StreamEvent]:
+        nonlocal terminal
+        terminal = None
+        async for event in backend.stream_extract(
+            prompt=attempt_prompt,
+            json_schema=json_schema,
+            timeout=timeout,
+            temperature=resolved_temperature,
+            seed=resolved_seed,
+            modal_parts=modal_parts,
+        ):
+            if event.is_terminal:
+                terminal = event.result
+            else:
+                yield event
+
+    async for event in _attempt(prompt):
+        yield event
+    captured = terminal
+    if captured is None:
+        raise ExtractionFailed(f"streaming adapter produced no terminal event for spec {name!r}")
+    _trace_deterministic(captured)
+    try:
+        validated = bundle.pydantic_cls.model_validate(captured.data)
+    except ValidationError as first_err:
+        retry_prompt = _corrective_prompt(prompt, first_err)
+        async for event in _attempt(retry_prompt):
+            yield event
+        captured = terminal
+        if captured is None:
+            raise ExtractionFailed(
+                f"streaming adapter produced no terminal event for spec {name!r}"
+            ) from first_err
+        _trace_deterministic(captured)
+        try:
+            validated = bundle.pydantic_cls.model_validate(captured.data)
+        except ValidationError as second_err:
+            raise ExtractionFailed(
+                f"validation failed after retry for spec {name!r}"
+            ) from second_err
+    yield validated
 
 
 def run_sync(
