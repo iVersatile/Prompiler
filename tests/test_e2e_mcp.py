@@ -40,7 +40,7 @@ INVOICE_SPEC: dict[str, Any] = {
     ],
 }
 
-INVOICE_YAML = "spec_version: 1\nname: invoice\ntask: extract\n"
+INVOICE_YAML = "spec_version: 2\nname: invoice\ntask: extract\n"
 
 
 def _run(coro: Awaitable[_T]) -> _T:
