@@ -391,3 +391,24 @@ def test_migrate_spec_directory_rejected(
     assert rc == 2
     err = capsys.readouterr().err
     assert "not a file" in err
+
+
+@pytest.mark.unit
+def test_migrate_spec_failed_write_leaves_original_intact(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    f = _write_yaml(tmp_path / "invoice.yaml", _v1_extract_spec())
+    before = f.read_text(encoding="utf-8")
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated write failure")
+
+    monkeypatch.setattr("prompiler.cli.os.replace", _boom)
+    rc = main(["migrate-spec", str(f)])
+
+    assert rc == 2
+    assert "cannot write" in capsys.readouterr().err
+    assert f.read_text(encoding="utf-8") == before
+    assert list(tmp_path.iterdir()) == [f]
