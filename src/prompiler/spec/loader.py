@@ -183,6 +183,9 @@ def _resolve_parent_path(child_path: Path, extends_ref: str) -> Path:
     """Resolve a parent `extends` reference relative to the child's directory.
 
     Bare references gain a `.yaml` suffix; absolute references are used as-is.
+    Resolution is intentionally unconfined: `extends` is a trusted authoring
+    surface (like a Python `import`), so `../` and absolute refs are permitted
+    by design, not by oversight. See docs/adr/0002-extends-path-trust-model.md.
     """
     ref = Path(extends_ref)
     if ref.suffix == "":
