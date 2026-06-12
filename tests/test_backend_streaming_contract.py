@@ -12,10 +12,11 @@ The streaming contract adds two symbols to ``prompiler.backends.base``:
     final ``ExtractResult`` (``result is not None`` ⇔ terminal).
   * ``StreamingBackendAdapter`` — a ``@runtime_checkable`` Protocol that extends
     ``BackendAdapter`` with ``stream_extract``. Adapters opt in individually:
-    Claude, OpenAI, and Gemini stream in G2 (satisfy ``StreamingBackendAdapter``
-    and report ``supports('streaming') is True``), while Ollama remains
-    buffered-only — it keeps satisfying ``BackendAdapter`` and reports
-    ``supports('streaming') is False`` via the unknown-feature default.
+    Claude, OpenAI, and Gemini stream in G2 and Ollama in G3 (all satisfy
+    ``StreamingBackendAdapter`` and report ``supports('streaming') is True``),
+    while ``MockAdapter`` remains buffered-only — it keeps satisfying
+    ``BackendAdapter`` and reports ``supports('streaming') is False`` via the
+    unknown-feature default.
 
 No network: the real-adapter checks build a bare ``httpx.AsyncClient`` and only
 exercise ``isinstance`` / ``supports`` (no request is issued), closing the
@@ -45,12 +46,8 @@ from prompiler.backends import (
 )
 from prompiler.backends.mock import MockAdapter
 
-STREAMING_ADAPTER_CLASSES = [ClaudeAdapter, OpenAIAdapter, GeminiAdapter]
-NON_STREAMING_ADAPTER_CLASSES = [
-    MockAdapter,
-    OllamaAdapter,
-]
-NON_STREAMING_REAL_ADAPTER_CLASSES = [OllamaAdapter]
+STREAMING_ADAPTER_CLASSES = [ClaudeAdapter, OpenAIAdapter, GeminiAdapter, OllamaAdapter]
+NON_STREAMING_ADAPTER_CLASSES = [MockAdapter]
 
 
 def _terminal_result() -> ExtractResult:
@@ -119,19 +116,6 @@ def test_streaming_adapter_classes_have_streaming_method(cls: type) -> None:
 @pytest.mark.unit
 def test_mock_adapter_reports_streaming_unsupported() -> None:
     assert MockAdapter().supports("streaming") is False
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("cls", NON_STREAMING_REAL_ADAPTER_CLASSES)
-def test_non_streaming_real_adapter_reports_streaming_unsupported(cls: type) -> None:
-    client = httpx.AsyncClient()
-    try:
-        adapter = cls(client=client)
-        assert isinstance(adapter, BackendAdapter)
-        assert not isinstance(adapter, StreamingBackendAdapter)
-        assert adapter.supports("streaming") is False
-    finally:
-        asyncio.run(client.aclose())
 
 
 @pytest.mark.unit

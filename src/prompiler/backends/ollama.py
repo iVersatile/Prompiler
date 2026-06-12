@@ -20,13 +20,14 @@ from __future__ import annotations
 import base64
 import copy
 import json
-from collections.abc import Sequence
+import time
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import httpx
 
-from prompiler.backends._pipeline import post_with_retry, truncate_for_error
-from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent
+from prompiler.backends._pipeline import iter_ndjson_data, post_with_retry, truncate_for_error
+from prompiler.backends.base import CapabilityError, ExtractResult, ModalContent, StreamEvent
 from prompiler.backends.observability import (
     DEFAULT_PRICING_TABLE,
     ObservabilityHook,
@@ -134,8 +135,100 @@ class OllamaAdapter:
             deterministic=seed is not None,
         )
 
+    async def stream_extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+        temperature: float = 0.0,
+        seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
+    ) -> AsyncIterator[StreamEvent]:
+        """Stream the same extract as ``extract``, yielding deltas then a terminal event.
+
+        Drives ``/api/chat`` with ``"stream": True`` and decodes the NDJSON chunk
+        sequence via ``iter_ndjson_data``: each chunk's ``message.content`` is a
+        string fragment, re-emitted as a non-terminal ``StreamEvent`` and
+        accumulated. The fragments concatenate to the same JSON string buffered
+        ``extract`` parses, surfaced in one terminal ``StreamEvent``. Usage is
+        captured from the terminal ``"done": true`` chunk's ``prompt_eval_count``
+        / ``eval_count`` for metric parity. No retry — a partially consumed
+        stream cannot be safely replayed (G4).
+        """
+        message: dict[str, Any] = {"role": "user", "content": prompt}
+        images: list[str] = []
+        for part in modal_parts:
+            if part.modality == "audio":
+                raise CapabilityError(
+                    "OllamaAdapter cannot project audio input; only Gemini supports audio"
+                )
+            images.append(base64.b64encode(part.data).decode("ascii"))
+        if images:
+            message["images"] = images
+        options: dict[str, Any] = {"temperature": temperature}
+        if seed is not None:
+            options["seed"] = seed
+        payload: dict[str, Any] = {
+            "model": self._model,
+            "messages": [message],
+            "format": json_schema,
+            "stream": True,
+            "options": options,
+        }
+
+        fragments: list[str] = []
+        prompt_tokens = 0
+        completion_tokens = 0
+        started = time.perf_counter()
+        async for frame in iter_ndjson_data(
+            client=self._client,
+            path="/api/chat",
+            payload=payload,
+            vendor_label="Ollama",
+            timeout=timeout,
+        ):
+            chunk = frame.get("message") or {}
+            content = chunk.get("content")
+            if isinstance(content, str) and content != "":
+                fragments.append(content)
+                yield StreamEvent(delta=content)
+            if frame.get("done"):
+                prompt_tokens = int(frame.get("prompt_eval_count", 0))
+                completion_tokens = int(frame.get("eval_count", 0))
+        latency = time.perf_counter() - started
+
+        assembled = "".join(fragments)
+        try:
+            parsed = json.loads(assembled)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Ollama streamed content not valid JSON: {truncate_for_error(assembled)}"
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise RuntimeError(
+                f"Ollama streamed content did not decode to dict: {truncate_for_error(assembled)}"
+            )
+        await emit_call_metrics(
+            hook=self._observability,
+            backend="ollama",
+            model=self._model,
+            latency_seconds=latency,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self._pricing,
+        )
+        yield StreamEvent(
+            delta="",
+            result=ExtractResult(
+                data=parsed,
+                system_fingerprint=None,
+                deterministic=seed is not None,
+            ),
+        )
+
     def supports(self, feature: str) -> bool:
-        return feature in {"seed", "multimodal"}
+        return feature in {"seed", "multimodal", "streaming"}
 
     def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
         return copy.deepcopy(json_schema)

@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "interactions": [
+    {
+      "method": "POST",
+      "url": "http://localhost:11434/api/chat",
+      "request_headers": {
+        "content-type": "application/json"
+      },
+      "request_body_b64": "eyJtb2RlbCI6ICJsbGFtYTMuMSIsICJtZXNzYWdlcyI6IFt7InJvbGUiOiAidXNlciIsICJjb250ZW50IjogIkNsYXNzaWZ5IHRoZSBmb2xsb3dpbmcgdGV4dCBpbnRvIG9uZSByb3V0aW5nIGJ1Y2tldC4ifV0sICJmb3JtYXQiOiB7InR5cGUiOiAib2JqZWN0IiwgInByb3BlcnRpZXMiOiB7ImxhYmVsIjogeyJ0eXBlIjogInN0cmluZyJ9LCAicmVhc29uIjogeyJ0eXBlIjogInN0cmluZyJ9LCAibm90ZXMiOiB7InR5cGUiOiAic3RyaW5nIn19LCAicmVxdWlyZWQiOiBbImxhYmVsIiwgInJlYXNvbiJdLCAiYWRkaXRpb25hbFByb3BlcnRpZXMiOiBmYWxzZX0sICJzdHJlYW0iOiB0cnVlLCAib3B0aW9ucyI6IHsidGVtcGVyYXR1cmUiOiAwLjAsICJzZWVkIjogNDJ9fQ==",
+      "status": 200,
+      "response_headers": {
+        "content-type": "application/x-ndjson"
+      },
+      "response_body_b64": "eyJtb2RlbCI6ICJsbGFtYTMuMSIsICJjcmVhdGVkX2F0IjogIjIwMjYtMDUtMjJUMDA6MDA6MDBaIiwgIm1lc3NhZ2UiOiB7InJvbGUiOiAiYXNzaXN0YW50IiwgImNvbnRlbnQiOiAie1wibGFiZWxcIjogXCJzdXBwb3J0XCIifSwgImRvbmUiOiBmYWxzZX0KeyJtb2RlbCI6ICJsbGFtYTMuMSIsICJjcmVhdGVkX2F0IjogIjIwMjYtMDUtMjJUMDA6MDA6MDBaIiwgIm1lc3NhZ2UiOiB7InJvbGUiOiAiYXNzaXN0YW50IiwgImNvbnRlbnQiOiAiLCBcInJlYXNvblwiOiBcInVzZXIgcmVxdWVzdHMgIn0sICJkb25lIjogZmFsc2V9CnsibW9kZWwiOiAibGxhbWEzLjEiLCAiY3JlYXRlZF9hdCI6ICIyMDI2LTA1LTIyVDAwOjAwOjAwWiIsICJtZXNzYWdlIjogeyJyb2xlIjogImFzc2lzdGFudCIsICJjb250ZW50IjogImh1bWFuIGFzc2lzdGFuY2VcIn0ifSwgImRvbmUiOiBmYWxzZX0KeyJtb2RlbCI6ICJsbGFtYTMuMSIsICJjcmVhdGVkX2F0IjogIjIwMjYtMDUtMjJUMDA6MDA6MDBaIiwgIm1lc3NhZ2UiOiB7InJvbGUiOiAiYXNzaXN0YW50IiwgImNvbnRlbnQiOiAiIn0sICJkb25lIjogdHJ1ZSwgImRvbmVfcmVhc29uIjogInN0b3AiLCAicHJvbXB0X2V2YWxfY291bnQiOiAyMSwgImV2YWxfY291bnQiOiAxNH0K"
+    }
+  ]
+}
