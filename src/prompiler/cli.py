@@ -16,6 +16,7 @@ import asyncio
 import dataclasses
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -26,6 +27,7 @@ from typing import Annotated, Any, Literal
 
 import click
 import typer
+import yaml
 
 from prompiler import __version__
 from prompiler.backends.credentials import (
@@ -363,6 +365,17 @@ def login(
     raise typer.Exit(_cmd_login(backend=backend))
 
 
+@app.command("migrate-spec")
+def migrate_spec(
+    path: Annotated[
+        Path,
+        typer.Argument(help="Spec file to upgrade from spec_version 1 to 2, in place."),
+    ],
+) -> None:
+    """Rewrite a spec_version 1 file to spec_version 2 in place (idempotent)."""
+    raise typer.Exit(_cmd_migrate_spec(path))
+
+
 def _iter_spec_files(path: Path) -> list[Path]:
     if path.is_file():
         return [path]
@@ -390,6 +403,54 @@ def _cmd_validate(path: Path) -> int:
             had_issue = True
 
     return 1 if had_issue else 0
+
+
+_SPEC_VERSION_LINE_RE = re.compile(r"^(?P<prefix>spec_version:[ \t]*)1\b", re.MULTILINE)
+
+
+def _cmd_migrate_spec(path: Path) -> int:
+    if not path.exists():
+        sys.stderr.write(f"prompiler migrate-spec: path not found: {path}\n")
+        return 2
+    if not path.is_file():
+        sys.stderr.write(f"prompiler migrate-spec: not a file: {path}\n")
+        return 2
+
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        sys.stderr.write(f"prompiler migrate-spec: cannot read {path}: {exc}\n")
+        return 2
+
+    try:
+        raw = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        sys.stderr.write(f"prompiler migrate-spec: invalid YAML in {path}: {exc}\n")
+        return 1
+    if not isinstance(raw, dict):
+        sys.stderr.write(f"prompiler migrate-spec: spec root must be a mapping: {path}\n")
+        return 1
+
+    version = raw.get("spec_version")
+    if not isinstance(version, bool) and version == 2:
+        sys.stdout.write(f"{path}: already spec_version 2; nothing to do\n")
+        return 0
+    if isinstance(version, bool) or version != 1:
+        sys.stderr.write(
+            f"prompiler migrate-spec: expected spec_version 1 or 2, got {version!r}: {path}\n"
+        )
+        return 1
+
+    new_text, count = _SPEC_VERSION_LINE_RE.subn(r"\g<prefix>2", text, count=1)
+    if count == 0:
+        sys.stderr.write(
+            f"prompiler migrate-spec: could not locate spec_version line to rewrite: {path}\n"
+        )
+        return 1
+
+    path.write_text(new_text, encoding="utf-8")
+    sys.stdout.write(f"{path}: migrated spec_version 1 -> 2\n")
+    return 0
 
 
 def _cmd_codegen(spec_path: Path, out_dir: Path) -> int:
