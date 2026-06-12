@@ -13,6 +13,8 @@ from prompiler.backends.base import (
     CapabilityError,
     ExtractResult,
     ModalContent,
+    StreamEvent,
+    StreamingBackendAdapter,
 )
 from prompiler.backends.claude import ClaudeAdapter
 from prompiler.backends.credentials import (
@@ -59,6 +61,8 @@ __all__ = [
     "PricingEntry",
     "PricingTable",
     "RetryPolicy",
+    "StreamEvent",
+    "StreamingBackendAdapter",
     "emit_call_metrics",
     "with_retry",
 ]
