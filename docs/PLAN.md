@@ -284,7 +284,7 @@ PRD anchors: §8 Out of Scope; §3 (removes the v1 "single flat spec" limit).
 
 ### Track F — Migration + examples (MEDIUM)
 
-- [ ] **F1. `prompiler migrate-spec` command.** One-shot Typer command that
+- [x] **F1. `prompiler migrate-spec` command.** One-shot Typer command that
   rewrites a `version: 1` spec to `version: 2` in place. *Exit:* `migrate-spec`
   on a v1 file yields a loadable v2 file; running it on an already-v2 file is a
   safe no-op with a clear message (idempotent).
