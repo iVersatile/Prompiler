@@ -47,6 +47,14 @@ If the current task is the **first task of a new phase**, the §6 Phase Start Ga
 
 One-shot status check. Not a wait-loop. Does not modify state.
 
+### 1.4 Integration cadence (standing discipline)
+
+Do not accumulate local changes. Commit often and push continuously so remote CI exercises the diff at a reasonable pace; never let multiple completed tasks pile up uncommitted or unpushed. Integrate each task as it lands (already enforced per-task by §1.1).
+
+Open the phase PR to `main` **early in the phase, not only at phase-done**. This repo's CI (`.github/workflows/ci.yml` `on:`) fires only on `pull_request` and pushes to `dev`/`main` — a feature-branch push alone does **not** run CI. Opening the PR early means every subsequent push to the branch re-runs CI on the open PR, giving continuous remote integration instead of a single CI run at phase-done. A PR to `main` at the phase boundary is expected regardless (it feeds the §7 gate).
+
+This is standing policy: observe it every session, including immediately after a session restart.
+
 ---
 
 ## 2. Pre-Commit Gate
