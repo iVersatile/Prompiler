@@ -383,7 +383,7 @@ PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
   *Exit:* a streamed extract populates the cache only on completion; an immediate
   re-run hits cache and returns the full model without re-streaming; an aborted
   stream leaves no cache entry.
-- [ ] **H2. MCP streaming surface.** Thread streaming through the MCP `extract`
+- [x] **H2. MCP streaming surface.** Thread streaming through the MCP `extract`
   tool (`mcp/app.py:118-164`), preserving the `MAX_TEXT_BYTES` guard (L130-131) and
   `CapturingHook` usage drain (L132-146). *Exit:* an MCP integration test runs a
   streaming extract; usage `_meta` still drains; oversized input is still rejected
