@@ -22,13 +22,15 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
-from collections.abc import Awaitable
+from collections.abc import AsyncIterator, Awaitable, Sequence
 from typing import Any, TypeVar
 
 import pytest
 
 from conftest import ScriptedAdapter
+from prompiler.backends.base import ExtractResult, ModalContent, StreamEvent
 from prompiler.backends.mock import MockAdapter
+from prompiler.backends.observability import ObservabilityHook, PricingTable, emit_call_metrics
 from prompiler.compiler import compile_spec
 from prompiler.eval.runner import CapturingHook
 from prompiler.mcp.app import MAX_TEXT_BYTES, build_mcp
@@ -206,3 +208,100 @@ def test_tool_call_propagates_modal_capability_error() -> None:
     }
     with pytest.raises(Exception):  # noqa: B017 — FastMCP wraps CapabilityError
         _run(mcp.call_tool("doc", {"text": "body", "modal_parts": [part]}))
+
+
+class _StreamingScriptedAdapter:
+    """Streaming backend adapter for MCP streaming-surface tests (H2).
+
+    ``stream_extract`` streams one non-terminal ``StreamEvent`` per delta then a
+    terminal ``StreamEvent`` carrying ``ExtractResult(data=payload)``. When an
+    ``ObservabilityHook`` is supplied it emits ``BackendCallMetrics`` after the
+    stream drains (mirroring the real SSE adapters), so the MCP usage ``_meta``
+    has a call to drain. ``calls`` counts ``stream_extract`` invocations — a zero
+    count proves the ``MAX_TEXT_BYTES`` guard rejected oversized input pre-call.
+    """
+
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        deltas: Sequence[str] = (),
+        observability: ObservabilityHook | None = None,
+        tokens: tuple[int, int] = (0, 0),
+        pricing: PricingTable | None = None,
+        backend_name: str = "scripted-stream",
+        model: str = "test-stream-model",
+    ) -> None:
+        self._payload = payload
+        self._deltas = tuple(deltas)
+        self._observability = observability
+        self._tokens = tokens
+        self._pricing = pricing if pricing is not None else PricingTable()
+        self._backend_name = backend_name
+        self._model = model
+        self.calls: int = 0
+
+    async def stream_extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+        temperature: float = 0.0,
+        seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
+    ) -> AsyncIterator[StreamEvent]:
+        self.calls += 1
+        for delta in self._deltas:
+            yield StreamEvent(delta=delta)
+        if self._observability is not None:
+            prompt_tokens, completion_tokens = self._tokens
+            await emit_call_metrics(
+                hook=self._observability,
+                backend=self._backend_name,
+                model=self._model,
+                latency_seconds=0.0,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                pricing=self._pricing,
+            )
+        yield StreamEvent(
+            delta="",
+            result=ExtractResult(data=self._payload, system_fingerprint=None, deterministic=True),
+        )
+
+    def supports(self, feature: str) -> bool:
+        return feature in ("seed", "streaming")
+
+    def to_tool_schema(self, json_schema: dict[str, Any]) -> dict[str, Any]:
+        return dict(json_schema)
+
+
+@pytest.mark.unit
+def test_streaming_tool_call_returns_structured_content_and_usage_meta() -> None:
+    reg = _registry(INVOICE_SPEC)
+    hook = CapturingHook()
+    backend = _StreamingScriptedAdapter(
+        {"total": "10.00"},
+        deltas=['{"total":', ' "10.00"}'],
+        observability=hook,
+        tokens=(7, 3),
+    )
+    mcp = build_mcp(reg, backend, usage_hook=hook, stream=True)
+    result = _run(mcp.call_tool("invoice", {"text": "Invoice total 10.00"}))
+    assert backend.calls == 1
+    assert result.structuredContent == {"total": "10.00"}
+    usage = result.meta["usage"]
+    assert usage["prompt_tokens"] == 7
+    assert usage["completion_tokens"] == 3
+
+
+@pytest.mark.unit
+def test_streaming_tool_rejects_oversized_text() -> None:
+    reg = _registry(INVOICE_SPEC)
+    backend = _StreamingScriptedAdapter({"total": "10.00"})
+    mcp = build_mcp(reg, backend, stream=True)
+    oversized = "x" * (MAX_TEXT_BYTES + 1)
+    with pytest.raises(Exception):  # noqa: B017 — FastMCP wraps the ValueError
+        _run(mcp.call_tool("invoice", {"text": oversized}))
+    assert backend.calls == 0  # guard fired before any streaming call

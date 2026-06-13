@@ -28,6 +28,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 from mcp.types import CallToolResult, TextContent
+from pydantic import BaseModel
 
 from prompiler.backends.base import ModalContent
 from prompiler.backends.observability import BackendCallMetrics
@@ -81,15 +82,23 @@ def build_mcp(
     spec_sources: Mapping[str, str] | None = None,
     usage_hook: CapturingHook | None = None,
     name: str = "prompiler",
+    stream: bool = False,
 ) -> FastMCP:
-    """Build a FastMCP server exposing every spec in ``registry`` as a tool."""
+    """Build a FastMCP server exposing every spec in ``registry`` as a tool.
+
+    With ``stream=True`` each tool drives ``orchestrator.run_stream`` and folds
+    the streamed deltas down to the terminal validated model — the MCP tool
+    still returns one ``CallToolResult``, so streaming is an internal detail
+    that preserves the same result shape, ``MAX_TEXT_BYTES`` guard, and usage
+    ``_meta`` drain as the buffered path (H2).
+    """
     mcp = FastMCP(name)
     sources: Mapping[str, str] = spec_sources or {}
     drain_lock = asyncio.Lock()
 
     for spec_name in sorted(registry.names()):
         bundle = registry.get(spec_name)
-        _register_tool(mcp, spec_name, bundle, backend, registry, usage_hook, drain_lock)
+        _register_tool(mcp, spec_name, bundle, backend, registry, usage_hook, drain_lock, stream)
 
     @mcp.resource("prompiler://specs/{spec_name}", mime_type=_SPEC_MIME)
     def _spec_resource(spec_name: str) -> str:
@@ -115,6 +124,35 @@ def build_mcp(
     return mcp
 
 
+async def _drain_stream(
+    spec_name: str,
+    text: str,
+    backend: Any,
+    registry: Registry,
+    modal_parts: tuple[ModalContent, ...],
+) -> BaseModel:
+    """Drain ``run_stream`` to its terminal validated model.
+
+    ``run_stream`` yields non-terminal ``StreamEvent`` deltas then one validated
+    ``BaseModel`` (and raises ``ExtractionFailed`` if no terminal event arrives).
+    The MCP tool returns a single result, so the deltas are discarded and only
+    the model is kept.
+    """
+    model: BaseModel | None = None
+    async for item in orchestrator.run_stream(
+        spec_name,
+        text,
+        backend=backend,
+        registry=registry,
+        modal_parts=modal_parts,
+    ):
+        if isinstance(item, BaseModel):
+            model = item
+    if model is None:  # pragma: no cover — run_stream raises before this
+        raise RuntimeError(f"stream for {spec_name!r} produced no terminal model")
+    return model
+
+
 def _register_tool(
     mcp: FastMCP,
     spec_name: str,
@@ -123,6 +161,7 @@ def _register_tool(
     registry: Registry,
     usage_hook: CapturingHook | None,
     drain_lock: asyncio.Lock,
+    stream: bool,
 ) -> None:
     model_cls = bundle.pydantic_cls
 
@@ -130,13 +169,17 @@ def _register_tool(
         if len(text.encode("utf-8")) > MAX_TEXT_BYTES:
             raise ValueError(f"text exceeds {MAX_TEXT_BYTES} bytes; split the input before calling")
         before = len(usage_hook.calls) if usage_hook is not None else 0
-        model = await orchestrator.run(
-            spec_name,
-            text,
-            backend=backend,
-            registry=registry,
-            modal_parts=_decode_modal_parts(modal_parts),
-        )
+        decoded = _decode_modal_parts(modal_parts)
+        if stream:
+            model = await _drain_stream(spec_name, text, backend, registry, decoded)
+        else:
+            model = await orchestrator.run(
+                spec_name,
+                text,
+                backend=backend,
+                registry=registry,
+                modal_parts=decoded,
+            )
         structured = model.model_dump(mode="json")
         meta: dict[str, Any] | None = None
         if usage_hook is not None:
