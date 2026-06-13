@@ -388,7 +388,7 @@ PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
   `CapturingHook` usage drain (L132-146). *Exit:* an MCP integration test runs a
   streaming extract; usage `_meta` still drains; oversized input is still rejected
   pre-call.
-- [ ] **H3. Opt-out + non-streaming fallback.** A disable switch forces the buffered
+- [x] **H3. Opt-out + non-streaming fallback.** A disable switch forces the buffered
   `extract` path; an adapter lacking `supports("streaming")` transparently buffers
   when routed through the streaming entrypoint. *Exit:* the disable flag forces
   buffered extract (no stream consumed); a non-streaming adapter routed through the
