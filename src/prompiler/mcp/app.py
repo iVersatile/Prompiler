@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import os
 from collections.abc import Mapping
 from typing import Any
 
@@ -33,8 +34,11 @@ from pydantic import BaseModel
 from prompiler.backends.base import ModalContent
 from prompiler.backends.observability import BackendCallMetrics
 from prompiler.eval.runner import CapturingHook
+from prompiler.obs import get_logger
 from prompiler.runtime import orchestrator
 from prompiler.runtime.registry import Registry
+
+_logger = get_logger("prompiler.mcp.app")
 
 _SPEC_MIME = "application/yaml"
 _ARTEFACT_MIME = "application/json"
@@ -42,6 +46,16 @@ _ARTEFACT_MIME = "application/json"
 # Bound the per-call tool input so a single request can't pin memory or stream
 # an unbounded prompt to a backend (P6 DoD — "no unbounded payload sizes").
 MAX_TEXT_BYTES = 1_048_576  # 1 MiB of UTF-8 source text
+
+# Opt-out switch: when set to "1" the streaming entrypoint forces the buffered
+# ``extract`` path so no stream is consumed (H3). Mirrors the kwarg/env shape of
+# ``PROMPILER_DISABLE_CACHE`` in the orchestrator.
+DISABLE_STREAM_ENV = "PROMPILER_DISABLE_STREAMING"
+
+# Backends (by class name) for which a streaming-to-buffered fallback has already
+# been warned, so the WARN fires once per backend per process — no silent
+# capability drop, no log spam (mirrors orchestrator._warned_backends).
+_stream_fallback_warned: set[str] = set()
 
 
 def _usage_meta(metric: BackendCallMetrics) -> dict[str, Any]:
@@ -73,6 +87,37 @@ def _decode_modal_parts(raw: list[dict[str, Any]] | None) -> tuple[ModalContent,
         )
         for p in raw
     )
+
+
+def _streaming_disabled() -> bool:
+    """Return True when the opt-out env forces the buffered ``extract`` path."""
+    return os.environ.get(DISABLE_STREAM_ENV) == "1"
+
+
+def _should_stream(stream: bool, backend: Any) -> bool:
+    """Decide whether a tool call drives the streaming path.
+
+    Streaming is taken only when the server was built with ``stream=True``, the
+    opt-out env is unset, and the backend advertises ``supports("streaming")``.
+    A streaming-capable server routed to a non-streaming backend transparently
+    buffers and WARNs once per backend class — never a silent capability drop
+    (H3). The deliberate env opt-out buffers silently (it is intentional).
+    """
+    if not stream:
+        return False
+    if _streaming_disabled():
+        return False
+    if backend.supports("streaming"):
+        return True
+    name = type(backend).__name__
+    if name not in _stream_fallback_warned:
+        _stream_fallback_warned.add(name)
+        _logger.warning(
+            "streaming requested but %s lacks streaming support; buffering instead",
+            name,
+            extra={"event": "streaming_fallback", "backend": name},
+        )
+    return False
 
 
 def build_mcp(
@@ -170,7 +215,7 @@ def _register_tool(
             raise ValueError(f"text exceeds {MAX_TEXT_BYTES} bytes; split the input before calling")
         before = len(usage_hook.calls) if usage_hook is not None else 0
         decoded = _decode_modal_parts(modal_parts)
-        if stream:
+        if _should_stream(stream, backend):
             model = await _drain_stream(spec_name, text, backend, registry, decoded)
         else:
             model = await orchestrator.run(

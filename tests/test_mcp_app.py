@@ -33,7 +33,7 @@ from prompiler.backends.mock import MockAdapter
 from prompiler.backends.observability import ObservabilityHook, PricingTable, emit_call_metrics
 from prompiler.compiler import compile_spec
 from prompiler.eval.runner import CapturingHook
-from prompiler.mcp.app import MAX_TEXT_BYTES, build_mcp
+from prompiler.mcp.app import DISABLE_STREAM_ENV, MAX_TEXT_BYTES, build_mcp
 from prompiler.runtime.registry import Registry, register_from_dict
 from prompiler.spec import EntitySpec
 
@@ -211,14 +211,19 @@ def test_tool_call_propagates_modal_capability_error() -> None:
 
 
 class _StreamingScriptedAdapter:
-    """Streaming backend adapter for MCP streaming-surface tests (H2).
+    """Streaming backend adapter for MCP streaming-surface tests (H2/H3).
 
-    ``stream_extract`` streams one non-terminal ``StreamEvent`` per delta then a
-    terminal ``StreamEvent`` carrying ``ExtractResult(data=payload)``. When an
-    ``ObservabilityHook`` is supplied it emits ``BackendCallMetrics`` after the
-    stream drains (mirroring the real SSE adapters), so the MCP usage ``_meta``
-    has a call to drain. ``calls`` counts ``stream_extract`` invocations — a zero
-    count proves the ``MAX_TEXT_BYTES`` guard rejected oversized input pre-call.
+    Satisfies both protocols, like the real SSE adapters: ``stream_extract``
+    streams one non-terminal ``StreamEvent`` per delta then a terminal
+    ``StreamEvent`` carrying ``ExtractResult(data=payload)``, and ``extract``
+    returns the same payload buffered. When an ``ObservabilityHook`` is supplied
+    either path emits ``BackendCallMetrics`` after completing (mirroring the real
+    SSE adapters), so the MCP usage ``_meta`` has a call to drain.
+
+    ``calls`` counts ``stream_extract`` invocations and ``buffered_calls`` counts
+    ``extract`` invocations, so a test can prove *which* path ran: a zero
+    ``calls`` count proves the stream was never consumed (guard rejected
+    oversized input, or the H3 opt-out forced the buffered path).
     """
 
     def __init__(
@@ -240,6 +245,35 @@ class _StreamingScriptedAdapter:
         self._backend_name = backend_name
         self._model = model
         self.calls: int = 0
+        self.buffered_calls: int = 0
+
+    async def _emit_metrics(self) -> None:
+        if self._observability is None:
+            return
+        prompt_tokens, completion_tokens = self._tokens
+        await emit_call_metrics(
+            hook=self._observability,
+            backend=self._backend_name,
+            model=self._model,
+            latency_seconds=0.0,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            pricing=self._pricing,
+        )
+
+    async def extract(
+        self,
+        *,
+        prompt: str,
+        json_schema: dict[str, Any],
+        timeout: float | None = None,
+        temperature: float = 0.0,
+        seed: int | None = 42,
+        modal_parts: Sequence[ModalContent] = (),
+    ) -> ExtractResult:
+        self.buffered_calls += 1
+        await self._emit_metrics()
+        return ExtractResult(data=self._payload, system_fingerprint=None, deterministic=True)
 
     async def stream_extract(
         self,
@@ -254,17 +288,7 @@ class _StreamingScriptedAdapter:
         self.calls += 1
         for delta in self._deltas:
             yield StreamEvent(delta=delta)
-        if self._observability is not None:
-            prompt_tokens, completion_tokens = self._tokens
-            await emit_call_metrics(
-                hook=self._observability,
-                backend=self._backend_name,
-                model=self._model,
-                latency_seconds=0.0,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                pricing=self._pricing,
-            )
+        await self._emit_metrics()
         yield StreamEvent(
             delta="",
             result=ExtractResult(data=self._payload, system_fingerprint=None, deterministic=True),
@@ -305,3 +329,60 @@ def test_streaming_tool_rejects_oversized_text() -> None:
     with pytest.raises(Exception):  # noqa: B017 — FastMCP wraps the ValueError
         _run(mcp.call_tool("invoice", {"text": oversized}))
     assert backend.calls == 0  # guard fired before any streaming call
+
+
+@pytest.mark.unit
+def test_disable_env_forces_buffered_path_when_streaming(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # H3 opt-out: with stream=True, PROMPILER_DISABLE_STREAMING=1 must force the
+    # buffered extract path so the stream is never consumed, yet the call still
+    # returns the same structured content + usage meta.
+    monkeypatch.setenv(DISABLE_STREAM_ENV, "1")
+    reg = _registry(INVOICE_SPEC)
+    hook = CapturingHook()
+    backend = _StreamingScriptedAdapter(
+        {"total": "10.00"},
+        deltas=['{"total":', ' "10.00"}'],
+        observability=hook,
+        tokens=(7, 3),
+    )
+    mcp = build_mcp(reg, backend, usage_hook=hook, stream=True)
+    result = _run(mcp.call_tool("invoice", {"text": "Invoice total 10.00"}))
+    assert backend.calls == 0  # stream never consumed
+    assert backend.buffered_calls == 1  # buffered extract ran instead
+    assert result.structuredContent == {"total": "10.00"}
+    usage = result.meta["usage"]
+    assert usage["prompt_tokens"] == 7
+    assert usage["completion_tokens"] == 3
+
+
+@pytest.mark.unit
+def test_non_streaming_backend_falls_back_to_buffered() -> None:
+    # H3 capability fallback: a backend that does not advertise
+    # supports("streaming") routed through the streaming entrypoint must
+    # transparently buffer (ScriptedAdapter has only extract, no stream_extract).
+    reg = _registry(INVOICE_SPEC)
+    backend = ScriptedAdapter([{"total": "10.00"}])
+    mcp = build_mcp(reg, backend, stream=True)
+    result = _run(mcp.call_tool("invoice", {"text": "Invoice total 10.00"}))
+    assert backend.calls == 1  # buffered extract ran
+    assert result.structuredContent == {"total": "10.00"}
+
+
+@pytest.mark.unit
+def test_non_streaming_fallback_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    # H3 "no silent capability drop": the capability fallback must be observable.
+    import prompiler.mcp.app as app_module
+
+    app_module._stream_fallback_warned.clear()
+    reg = _registry(INVOICE_SPEC)
+    backend = ScriptedAdapter([{"total": "10.00"}])
+    mcp = build_mcp(reg, backend, stream=True)
+    with caplog.at_level("WARNING"):
+        _run(mcp.call_tool("invoice", {"text": "Invoice total 10.00"}))
+    fallback_records = [
+        r for r in caplog.records if getattr(r, "event", None) == "streaming_fallback"
+    ]
+    assert len(fallback_records) == 1
+    assert fallback_records[0].backend == "ScriptedAdapter"
