@@ -24,7 +24,7 @@ A spec is a single YAML file describing what to extract. Save the following as
 `invoice.yaml`:
 
 ```yaml
-spec_version: 1
+spec_version: 2
 name: invoice
 task: extract
 description: Extract billing details from a single invoice document.
@@ -110,4 +110,4 @@ retry on a validation error before raising `ExtractionFailed`.
 - [CLI reference](CLI.md) — every command and flag.
 - [Architecture](architecture.md) — how the layers fit together.
 - [V2 change validation](V2_VALIDATION.md) — golden snapshots that catch drift in compiled output.
-- [`examples/`](../examples/) — five worked specs covering arrays, enums, nested objects, patterns.
+- [`examples/`](../examples/) — nine worked specs covering arrays, enums, nested objects, patterns.

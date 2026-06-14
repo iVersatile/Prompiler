@@ -44,7 +44,7 @@ type_cmd "prompiler --help"
 # --- §2 Write a spec --------------------------------------------------------
 say "2. Write a spec — a single YAML file. Every field needs a description."
 cat > invoice.yaml <<'YAML'
-spec_version: 1
+spec_version: 2
 name: invoice
 task: extract
 description: Extract billing details from a single invoice document.
