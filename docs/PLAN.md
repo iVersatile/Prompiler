@@ -510,16 +510,16 @@ FR-13/14/15, §8.2 (v2 accepted set).
 
 ### Q5 exit criteria (phase-done, feeds §7 gate)
 
-- [ ] All I*, J*, and K* boxes checked; full suite green; coverage ≥ 80% repo-wide.
-- [ ] mypy strict clean across the whole package; FR traceability matrix green
+- [x] All I*, J*, and K* boxes checked; full suite green; coverage ≥ 80% repo-wide.
+- [x] mypy strict clean across the whole package; FR traceability matrix green
   (FR-1..FR-14; FR-15 container excluded from the functional matrix).
-- [ ] Security: two-layer secret scan + bandit clean; a documented audit confirms
+- [x] Security: two-layer secret scan + bandit clean; a documented audit confirms
   no payload/credential leakage in the v2 surface (RULES §8).
-- [ ] Docs cover the full v2 surface; no invalid `spec_version: 1` example remains;
+- [x] Docs cover the full v2 surface; no invalid `spec_version: 1` example remains;
   PRD §6 reflects the promoted v2 scope.
-- [ ] Version is `0.2.0` in lockstep (pyproject + `__init__`); the release dry-run
+- [x] Version is `0.2.0` in lockstep (pyproject + `__init__`); the release dry-run
   (build + container) passes; changelog/release notes are ready.
-- [ ] §5 Version Tag Gate is the sole path to the single `v0.2.0` tag — explicit
+- [x] §5 Version Tag Gate is the sole path to the single `v0.2.0` tag — explicit
   user approval required, never self-approved.
 
 ---
