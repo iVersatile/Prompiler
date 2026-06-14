@@ -37,3 +37,24 @@ def test_version_derived_from_metadata() -> None:
     # PackageNotFoundError branch is indented, so this line-anchored check
     # ignores it.)
     assert not re.search(r'^__version__\s*=\s*["\']\d', init_src, re.MULTILINE)
+
+
+@pytest.mark.unit
+def test_compiler_protocol_version_independent_of_version() -> None:
+    """A2 (RULES §10): COMPILER_PROTOCOL_VERSION must not be derived from, or
+    equal-by-construction to, __version__. The protocol version gates spec_hash
+    and bumps only on AST / projection / serialisation changes — bumping the
+    package release version must never move it."""
+    # Value independence: the two symbols must not be equal-by-construction.
+    assert prompiler.__version__ != prompiler.COMPILER_PROTOCOL_VERSION
+    # Source independence: the protocol version is a standalone string literal,
+    # not derived from __version__ or the package metadata.
+    init_src = (
+        Path(__file__).resolve().parents[1] / "src" / "prompiler" / "__init__.py"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"^COMPILER_PROTOCOL_VERSION\s*=\s*(.+)$", init_src, re.MULTILINE)
+    assert match is not None
+    rhs = match.group(1).strip()
+    assert re.fullmatch(r"""["'][^"']*["']""", rhs), (
+        f"COMPILER_PROTOCOL_VERSION must be a standalone string literal, got: {rhs!r}"
+    )
