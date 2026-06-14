@@ -1,6 +1,7 @@
 """Smoke tests asserting the package is importable and exposes __version__."""
 
 import re
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -57,4 +58,19 @@ def test_compiler_protocol_version_independent_of_version() -> None:
     rhs = match.group(1).strip()
     assert re.fullmatch(r"""["'][^"']*["']""", rhs), (
         f"COMPILER_PROTOCOL_VERSION must be a standalone string literal, got: {rhs!r}"
+    )
+
+
+@pytest.mark.unit
+def test_pyproject_version_matches_package_version() -> None:
+    """B1: pyproject.toml is the single version literal; __version__ derives from
+    installed metadata. They can silently diverge when pyproject is bumped but the
+    package is not reinstalled (`uv sync`). This guard turns that stale-install lag
+    into a loud failure instead of letting the running version drift from source."""
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+    declared = data["project"]["version"]
+    assert declared == prompiler.__version__, (
+        f"pyproject [project].version is {declared!r} but the installed package "
+        f"reports {prompiler.__version__!r}; run `uv sync` to reinstall."
     )
