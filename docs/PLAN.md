@@ -465,7 +465,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
   *Exit:* a perf check (script/test) records each budget as met; any regression is
   fixed or recorded with rationale (perf-timing is the §7.1 manual-testing
   carve-out).
-- [ ] **I3. Coverage + type-strictness sweep.** Full suite green; coverage ≥ 80%
+- [x] **I3. Coverage + type-strictness sweep.** Full suite green; coverage ≥ 80%
   repo-wide; mypy strict clean across the **whole** package (not just touched
   modules). *Exit:* `pytest --cov` ≥ 80%; mypy strict clean; FR traceability
   matrix green (`tests/test_fr_traceability.py`).
