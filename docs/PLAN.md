@@ -558,7 +558,7 @@ testing the runtime attribute); no change to COMPILER_PROTOCOL_VERSION semantics
 
 ### Track B — Drift guard (SMALL, independent)
 
-- [ ] **B1. Guard pyproject literal == `__version__`.** Extend
+- [x] **B1. Guard pyproject literal == `__version__`.** Extend
   `tests/test_smoke.py`: parse `[project].version` from `pyproject.toml` and
   assert it equals `prompiler.__version__`. Converts the stale-install case
   (pyproject bumped, package not reinstalled) from silent drift into a loud
