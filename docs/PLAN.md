@@ -396,17 +396,17 @@ PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
 
 ### Q4 exit criteria (phase-done, feeds §7 gate)
 
-- [ ] All G* and H* boxes checked; full suite green; coverage ≥ 80%.
-- [ ] mypy strict clean across touched modules.
-- [ ] **§7.1 contract narrowing cited:** the `extract`→async-iterator streaming
+- [x] All G* and H* boxes checked; full suite green; coverage ≥ 80%.
+- [x] mypy strict clean across touched modules.
+- [x] **§7.1 contract narrowing cited:** the `extract`→async-iterator streaming
   surface on `BackendAdapter` and all four adapters lists the affected FRs (PRD §6)
   in the phase PR description.
-- [ ] Streaming and buffered paths return **field-equal terminal payloads**
+- [x] Streaming and buffered paths return **field-equal terminal payloads**
   (parity); the determinism contract (`seed`, `system_fingerprint`, `deterministic`
   on `ExtractResult`) is preserved on the assembled result.
-- [ ] No prompt/response payloads logged below `trace` (RULES.md §8) — stream chunks
+- [x] No prompt/response payloads logged below `trace` (RULES.md §8) — stream chunks
   are payloads; audit the new SSE/NDJSON parsers for leakage.
-- [ ] Cache stores only completed streams; an aborted/partial stream leaves no entry
+- [x] Cache stores only completed streams; an aborted/partial stream leaves no entry
   (H1); any streaming cassette wire bodies are redacted before commit (RULES §8).
 
 ---
