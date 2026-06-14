@@ -492,7 +492,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
 
 ### Track K — Release prep (LOW, gated)
 
-- [ ] **K1. Version bump.** Bump `pyproject.toml` `0.1.3`→`0.2.0` and
+- [x] **K1. Version bump.** Bump `pyproject.toml` `0.1.3`→`0.2.0` and
   `src/prompiler/__init__.py` `__version__` in lockstep. *Exit:* both read
   `0.2.0`; the `release.yml` verify-tag invariant (tag == `__version__`) would hold
   for a `v0.2.0` tag; `uv build` produces sdist+wheel and `twine check` is clean in
