@@ -524,6 +524,63 @@ FR-13/14/15, §8.2 (v2 accepted set).
 
 ---
 
+## 2.6 V1 — Version single-sourcing (post-`v0.2.0` maintenance, expanded)
+
+Post-release maintenance phase (not part of the v2 sequence above; opened after
+the `v0.2.0` tag). Retires the manual two-place version lockstep from Q5 K1: the
+package version lives in `pyproject.toml` L3 only, and `__version__` derives from
+installed metadata. Phase Start Gate (§6) cleared against base tag `v0.2.0`
+(CI green on `main`; scoped diff empty — main is at the tag). Blast radius SMALL:
+`src/prompiler/__init__.py`, `tests/test_smoke.py`, this PLAN note. No public API
+change — `__version__` stays a `str` module attribute and stays in `__all__`.
+
+RULES anchors: §5 (Version Tag Gate), §10 (COMPILER_PROTOCOL_VERSION decoupling),
+§1.1 step-3 (each sub-step has a verifiable criterion).
+
+**Non-goals:** no hatch-vcs / git-tag dynamic versioning (heavier, couples build
+to git state); no rewrite of `release.yml` verify-tag to parse pyproject (keep
+testing the runtime attribute); no change to COMPILER_PROTOCOL_VERSION semantics.
+
+### Track A — Derive the version (SMALL, single-owner)
+
+- [x] **A1. Derive `__version__` from installed metadata.** Replace the
+  `src/prompiler/__init__.py` L5 literal with
+  `importlib.metadata.version("prompiler")` (annotated `str`), falling back to a
+  sentinel under `PackageNotFoundError` for a source checkout without install.
+  `pyproject.toml` L3 becomes the only version literal in the tree; `__all__`
+  still exports `__version__`. *Exit:*
+  `uv run python -c 'import prompiler; print(prompiler.__version__)'` prints the
+  pyproject `version`; grep finds no version literal under `src/`.
+- [ ] **A2. Confirm COMPILER_PROTOCOL_VERSION stays decoupled.** Leave L7
+  untouched. Add one direct assertion that the two `__init__` symbols are
+  independent. *Exit:* a test fails if `COMPILER_PROTOCOL_VERSION` is ever
+  derived from / equal-by-construction to `__version__` (RULES §10).
+
+### Track B — Drift guard (SMALL, independent)
+
+- [ ] **B1. Guard pyproject literal == `__version__`.** Extend
+  `tests/test_smoke.py`: parse `[project].version` from `pyproject.toml` and
+  assert it equals `prompiler.__version__`. Converts the stale-install case
+  (pyproject bumped, package not reinstalled) from silent drift into a loud
+  failure. *Exit:* the test fails when the two diverge; passes after `uv sync`.
+- [ ] **B2. Preserve verify-tag (no workflow change).** Confirm the unchanged
+  `release.yml` verify-tag step still resolves `__version__` from installed
+  metadata. *Exit:* the local equivalent —
+  `uv run python -c 'import prompiler; print(prompiler.__version__)'` — returns
+  `v$VERSION`-matching output for the current tree.
+
+### V1 exit criteria (phase-done, feeds §7 gate)
+
+- [ ] `pyproject.toml` is the single version literal; `__version__` derived (A1).
+- [ ] COMPILER_PROTOCOL_VERSION independence guarded (A2, RULES §10).
+- [ ] `test_smoke.py` guards pyproject-literal == `__version__` (B1).
+- [ ] `release.yml` verify-tag invariant (tag == `v$__version__`) preserved;
+  `--version` CLI still emits the derived value (B2, regression).
+- [ ] Code commit cites a new LL (importlib.metadata single-source retires K1
+  lockstep).
+
+---
+
 ## 3. Open questions
 
 1. ~~v2 theme: depth vs breadth?~~ **RESOLVED: Mixed** (§1).
