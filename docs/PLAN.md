@@ -551,7 +551,7 @@ testing the runtime attribute); no change to COMPILER_PROTOCOL_VERSION semantics
   still exports `__version__`. *Exit:*
   `uv run python -c 'import prompiler; print(prompiler.__version__)'` prints the
   pyproject `version`; grep finds no version literal under `src/`.
-- [ ] **A2. Confirm COMPILER_PROTOCOL_VERSION stays decoupled.** Leave L7
+- [x] **A2. Confirm COMPILER_PROTOCOL_VERSION stays decoupled.** Leave L7
   untouched. Add one direct assertion that the two `__init__` symbols are
   independent. *Exit:* a test fails if `COMPILER_PROTOCOL_VERSION` is ever
   derived from / equal-by-construction to `__version__` (RULES §10).
