@@ -137,3 +137,33 @@ def test_gemini_stream_extract_surfaces_http_error_body() -> None:
     assert "Gemini" in message
     assert "500" in message
     assert "upstream stream boom" in message
+
+
+@pytest.mark.unit
+def test_gemini_stream_extract_raises_when_no_functioncall() -> None:
+    # Parity with the buffered path (which raises when no functionCall is
+    # present): if the stream carries only non-functionCall parts, the
+    # accumulator stays empty and stream_extract must raise a vendor-prefixed
+    # RuntimeError rather than yield an empty-dict terminal payload.
+    chunk = {"candidates": [{"content": {"parts": [{"text": "no function call here"}]}}]}
+    body = f"data: {json.dumps(chunk)}\n\n"
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_handler), base_url=GEMINI_BASE_URL)
+    adapter = GeminiAdapter(client=client)
+
+    async def _run() -> None:
+        async for _event in adapter.stream_extract(
+            prompt=STREAMING_PROMPT, json_schema=STREAMING_SCHEMA
+        ):
+            pass
+
+    try:
+        with pytest.raises(RuntimeError) as excinfo:
+            asyncio.run(_run())
+    finally:
+        asyncio.run(client.aclose())
+
+    assert "Gemini" in str(excinfo.value)
