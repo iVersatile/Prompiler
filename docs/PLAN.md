@@ -477,7 +477,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
   composition); fix `docs/TUTORIAL.md:27` `spec_version: 1`→`2` and any other
   v1-only examples. *Exit:* README lists every v2 capability; TUTORIAL examples
   load under `spec_version: 2`; no invalid-version example remains.
-- [ ] **J2. CLI + API reference.** Update `docs/CLI.md` (`login`, `migrate-spec`,
+- [x] **J2. CLI + API reference.** Update `docs/CLI.md` (`login`, `migrate-spec`,
   `refine --auto-apply`, streaming/cache flags) and `docs/API.md`
   (`KeychainProvider`/`OAuthProvider`, the streaming surface, cache opt-out) to the
   v2 public surface. *Exit:* every v2 CLI command + flag and public API symbol is

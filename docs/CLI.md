@@ -21,6 +21,8 @@ $ prompiler [OPTIONS] COMMAND [ARGS]...
 * `eval`: Run a spec against a fixture and emit...
 * `refine`: Propose a prompt edit from an eval report...
 * `stats`: Summarise recorded backend usage over a...
+* `login`: Prime the OAuth token store for a backend...
+* `migrate-spec`: Rewrite a spec_version 1 file to...
 
 ## `prompiler validate`
 
@@ -94,7 +96,7 @@ $ prompiler eval [OPTIONS] SPEC FIXTURES
 
 **Options**:
 
-* `--backend [mock|ollama]`: Backend to run the eval against (default: ollama).  [default: ollama]
+* `--backend [mock|ollama]`: Backend to run the eval against (default: ollama).
 * `--model TEXT`: Model name override for the backend.
 * `--base-url TEXT`: Base URL override for the ollama backend.
 * `--json-out PATH`: Write the eval-report.json to this path.
@@ -121,10 +123,16 @@ $ prompiler refine [OPTIONS] REPORT PROMPT
 
 **Options**:
 
-* `--backend [mock|ollama]`: Tutor backend (default: ollama).  [default: ollama]
+* `--backend [mock|ollama]`: Tutor backend (default: ollama).
 * `--model TEXT`: Model name override for the backend.
 * `--base-url TEXT`: Base URL override for the ollama backend.
 * `--timeout FLOAT`: Per-call timeout in seconds.
+* `--auto-apply`: Run a bounded propose-&gt;apply-&gt;eval loop instead of printing one diff.
+* `--spec PATH`: Spec YAML to evaluate against (required with --auto-apply).
+* `--fixtures PATH`: Fixtures YAML to evaluate against (required with --auto-apply).
+* `--threshold FLOAT`: Target aggregate F1 to stop at (required with --auto-apply).
+* `--max-iterations INTEGER`: Maximum propose-&gt;apply-&gt;eval rounds for --auto-apply.  [default: 3]
+* `--force`: Apply even when the git tree is dirty.
 * `--help`: Show this message and exit.
 
 ## `prompiler stats`
@@ -141,4 +149,40 @@ $ prompiler stats [OPTIONS]
 
 * `--since TEXT`: Lookback window: e.g. 7d, 24h, 30m, 2w (default: 7d).  [default: 7d]
 * `--log PATH`: Usage-log path override (default: $PROMPILER_USAGE_LOG or .prompiler/usage.jsonl).
+* `--help`: Show this message and exit.
+
+## `prompiler login`
+
+Prime the OAuth token store for a backend from PROMPILER_OAUTH_* env vars.
+
+**Usage**:
+
+```console
+$ prompiler login [OPTIONS] BACKEND
+```
+
+**Arguments**:
+
+* `BACKEND`: Backend to prime OAuth credentials for: claude, openai, or gemini.  [required]
+
+**Options**:
+
+* `--help`: Show this message and exit.
+
+## `prompiler migrate-spec`
+
+Rewrite a spec_version 1 file to spec_version 2 in place (idempotent).
+
+**Usage**:
+
+```console
+$ prompiler migrate-spec [OPTIONS] PATH
+```
+
+**Arguments**:
+
+* `PATH`: Spec file to upgrade from spec_version 1 to 2, in place.  [required]
+
+**Options**:
+
 * `--help`: Show this message and exit.
