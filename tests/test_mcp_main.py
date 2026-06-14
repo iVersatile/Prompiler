@@ -7,6 +7,7 @@ entry point that wires a FastMCP server over stdio (default) or HTTP.
 
 from __future__ import annotations
 
+import types
 from pathlib import Path
 
 import pytest
@@ -115,6 +116,30 @@ def test_resolve_examples_dir_default(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_resolve_examples_dir_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("PROMPILER_MCP_EXAMPLES_DIR", str(tmp_path))
     assert mcp_main._resolve_examples_dir() == tmp_path
+
+
+@pytest.mark.unit
+def test_resolve_examples_dir_prefers_packaged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("PROMPILER_MCP_EXAMPLES_DIR", raising=False)
+    packaged = tmp_path / "examples"
+    packaged.mkdir()
+    monkeypatch.setattr(mcp_main, "resources", types.SimpleNamespace(files=lambda _pkg: tmp_path))
+    assert mcp_main._resolve_examples_dir() == packaged
+
+
+@pytest.mark.unit
+def test_resolve_examples_dir_falls_back_when_not_packaged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("PROMPILER_MCP_EXAMPLES_DIR", raising=False)
+    # tmp_path has no "examples" subdir, so the packaged branch is skipped and
+    # the editable/dev repo-root fallback is used.
+    monkeypatch.setattr(mcp_main, "resources", types.SimpleNamespace(files=lambda _pkg: tmp_path))
+    resolved = mcp_main._resolve_examples_dir()
+    assert resolved.name == "examples"
+    assert resolved == Path(mcp_main.__file__).resolve().parents[3] / "examples"
 
 
 @pytest.mark.unit

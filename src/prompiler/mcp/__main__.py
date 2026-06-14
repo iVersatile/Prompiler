@@ -16,8 +16,9 @@ Configuration is environment-driven so the container image stays generic:
 
 - ``PROMPILER_MCP_BACKEND`` (default ``ollama``) — single backend selected at
   startup (option A); one of ``claude|openai|gemini|ollama``.
-- ``PROMPILER_MCP_EXAMPLES_DIR`` (default: repo ``examples/``) — spec YAMLs to
-  compile and expose as tools.
+- ``PROMPILER_MCP_EXAMPLES_DIR`` (default: packaged ``prompiler/examples/`` via
+  ``importlib.resources``, falling back to the repo-root ``examples/`` in
+  editable/dev installs) — spec YAMLs to compile and expose as tools.
 - ``PROMPILER_MCP_HOST`` (default ``127.0.0.1``).
 - ``PROMPILER_MCP_PORT`` (default ``8765``); ``--port`` overrides it.
 - ``PROMPILER_MCP_ALLOW_NON_LOOPBACK`` (truthy = opt-in to non-loopback bind).
@@ -32,6 +33,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from importlib import resources
 from pathlib import Path
 
 from starlette.responses import Response
@@ -89,6 +91,9 @@ def _resolve_examples_dir() -> Path:
     raw = os.environ.get("PROMPILER_MCP_EXAMPLES_DIR")
     if raw:
         return Path(raw)
+    packaged = resources.files("prompiler") / "examples"
+    if packaged.is_dir():
+        return Path(str(packaged))
     return Path(__file__).resolve().parents[3] / "examples"
 
 

@@ -497,7 +497,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
   `0.2.0`; the `release.yml` verify-tag invariant (tag == `__version__`) would hold
   for a `v0.2.0` tag; `uv build` produces sdist+wheel and `twine check` is clean in
   a dry run.
-- [ ] **K2. Local release gate + golden + container dry-run.** Run the §9 local
+- [x] **K2. Local release gate + golden + container dry-run.** Run the §9 local
   gate, verify/regenerate the V2_VALIDATION golden snapshots
   (`tests/test_e2e_clients.py`), and a CPU-only container build dry-run. *Exit:* §9
   gate passes; golden snapshots stable (no unexpected drift); the container image
