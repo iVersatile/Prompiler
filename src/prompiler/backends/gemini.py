@@ -281,6 +281,8 @@ class GeminiAdapter:
                         accumulator.update(args)
                         yield StreamEvent(delta=json.dumps(args))
         latency = time.perf_counter() - started
+        if not accumulator:
+            raise RuntimeError(f"Gemini stream missing functionCall for {EXTRACT_TOOL_NAME!r}")
         await emit_call_metrics(
             hook=self._observability,
             backend="gemini",

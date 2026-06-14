@@ -240,7 +240,17 @@ class ClaudeAdapter:
                 completion_tokens = int(usage.get("output_tokens", 0))
         latency = time.perf_counter() - started
 
-        data = json.loads("".join(fragments))
+        assembled = "".join(fragments)
+        try:
+            data = json.loads(assembled)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                f"Claude streamed content not valid JSON: {truncate_for_error(assembled)}"
+            ) from exc
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                f"Claude streamed content did not decode to dict: {truncate_for_error(assembled)}"
+            )
         await emit_call_metrics(
             hook=self._observability,
             backend="claude",

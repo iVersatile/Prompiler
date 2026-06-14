@@ -129,3 +129,34 @@ def test_openai_stream_extract_surfaces_http_error_body() -> None:
     assert "OpenAI" in message
     assert "500" in message
     assert "upstream stream boom" in message
+
+
+@pytest.mark.unit
+def test_openai_stream_extract_raises_runtime_error_on_malformed_json() -> None:
+    # Parity with the buffered path (LL-003): when the assembled tool-call
+    # arguments fragments do not form valid JSON, stream_extract must raise a
+    # vendor-prefixed RuntimeError, not leak a raw json.JSONDecodeError.
+    chunk = {
+        "choices": [{"delta": {"tool_calls": [{"function": {"arguments": "{not valid json"}}]}}]
+    }
+    body = f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n"
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(_handler), base_url=OPENAI_BASE_URL)
+    adapter = OpenAIAdapter(client=client)
+
+    async def _run() -> None:
+        async for _event in adapter.stream_extract(
+            prompt=STREAMING_PROMPT, json_schema=STREAMING_SCHEMA
+        ):
+            pass
+
+    try:
+        with pytest.raises(RuntimeError) as excinfo:
+            asyncio.run(_run())
+    finally:
+        asyncio.run(client.aclose())
+
+    assert "OpenAI" in str(excinfo.value)
