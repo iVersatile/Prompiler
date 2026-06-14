@@ -88,7 +88,10 @@ Q4  Streaming responses
       - depth (LARGE): all 4 adapters + runtime contract + orchestrator retry
       - extract becomes async-iterator; highest blast radius → last
 
-Q5  Hardening, docs, release → v0.2.0
+Q5  Hardening, docs, release → single v0.2.0 tag
+      - hardening: secret/bandit audit + perf-budget verify + coverage/mypy sweep
+      - docs: refresh README/TUTORIAL/CLI/API/architecture to shipped v2 surface
+      - release: bump 0.1.3→0.2.0, changelog, dry-run; tag via §5 (user-approved)
 ```
 
 **Staffing:** solo today, but phase boundaries and blast-radius isolation are
@@ -408,6 +411,116 @@ PRD anchors: §8 Out of Scope; §3 v1 non-goals (streaming).
   are payloads; audit the new SSE/NDJSON parsers for leakage.
 - [x] Cache stores only completed streams; an aborted/partial stream leaves no entry
   (H1); any streaming cassette wire bodies are redacted before commit (RULES §8).
+
+---
+
+## 2.5 Q5 — Hardening, docs, release (expanded)
+
+**Phase tag base for §6 gate:** `main` @ `bd84eca` (Q4 close — single-`v0.2.0`
+policy means Q4 ships no tag, so the gate base is the Q4-close commit, not a tag).
+The pre-Q5 streaming↔buffered parity fixes this gate surfaced (PR #53,
+`c8b6828`) are already merged; Q5 branches from `c8b6828`.
+**Blast radius:** LOW — Q5 is mostly non-code (docs refresh + release prep) plus a
+hardening audit. The only code touches are the two-file version bump and any
+audit-driven fixes; docs are isolated; no contract narrows. PRD anchors: §3
+(containerized release goal), §7 NFRs (perf/reliability/security/compat),
+FR-13/14/15, §8.2 (v2 accepted set).
+
+**Scope grounding (from codebase):**
+
+- **Release infra already exists from v1.** `.github/workflows/release.yml`
+  (verify-tag → build-dist → publish-pypi via OIDC → publish-image to
+  `ghcr.io/iversatile/prompiler` → github-release) and the `Dockerfile` are fully
+  built. Q5 does **not** rebuild them — it triggers them via the version bump and
+  the §5 user-approved `v0.2.0` tag.
+- **Version single source of truth.** `pyproject.toml` `version = "0.1.3"` and
+  `src/prompiler/__init__.py` `__version__ = "0.1.3"`; `release.yml` verify-tag
+  asserts the `v*` tag equals `prompiler.__version__`. Both must bump to `0.2.0`
+  in lockstep.
+- **User-facing docs are v1-only.** `README.md`, `docs/CLI.md`, `docs/API.md` do
+  not cover multimodal, `--auto-apply`, streaming, the compile/result caches,
+  `prompiler login` (keychain/OAuth), `migrate-spec`, or spec composition.
+  `docs/TUTORIAL.md:27` still shows `spec_version: 1`, which is **invalid** after
+  Q3 bumped specs to version 2. `docs/architecture.md` frames v2 features as "out
+  of scope here"/future (e.g. L216, L305) rather than shipped.
+- **PRD §8→§6 promotion is a still-open Q0 task** (PLAN §5, L469): promote the six
+  accepted §8 Out-of-Scope items into PRD §6 In-Scope.
+- **Gate evidence sources.** The FR traceability matrix
+  (`tests/test_fr_traceability.py`, FR-1..FR-14; FR-15 container excluded from the
+  functional matrix) and the PRD §7.1 perf budgets are what the §7 Phase Done Gate
+  reads.
+
+### Track I — Hardening (LOW–MEDIUM, audit-driven)
+
+- [ ] **I1. Security + secret audit.** Run the two-layer secret scan
+  (`scripts/scan_secrets.py` + gitleaks) and `bandit -r src/` across the tree, and
+  audit the new v2 code paths — modal bytes, stream chunks, credential
+  read/refresh, auto-apply spec writes — for payload leakage below `trace` and
+  credential leakage to stdout/stderr (RULES §8). *Exit:* secret scan + bandit
+  report clean; a short audit note confirms no payload/credential leakage in the
+  v2 surface; any fix carries an `Applying LL-NNN` cite.
+- [ ] **I2. Perf-budget verification.** Confirm PRD §7.1 budgets still hold after
+  the v2 additions (cache, streaming, composition): compile <200ms, validate
+  <50ms, run overhead <50ms, `run_batch` 100@conc=8 <60s, MCP cold start <1s.
+  *Exit:* a perf check (script/test) records each budget as met; any regression is
+  fixed or recorded with rationale (perf-timing is the §7.1 manual-testing
+  carve-out).
+- [ ] **I3. Coverage + type-strictness sweep.** Full suite green; coverage ≥ 80%
+  repo-wide; mypy strict clean across the **whole** package (not just touched
+  modules). *Exit:* `pytest --cov` ≥ 80%; mypy strict clean; FR traceability
+  matrix green (`tests/test_fr_traceability.py`).
+
+### Track J — Docs refresh to v2 (LOW, isolated)
+
+- [ ] **J1. README + TUTORIAL.** Refresh `README.md` to the shipped v2 surface
+  (multimodal, `--auto-apply`, streaming, caches, `login`, `migrate-spec`,
+  composition); fix `docs/TUTORIAL.md:27` `spec_version: 1`→`2` and any other
+  v1-only examples. *Exit:* README lists every v2 capability; TUTORIAL examples
+  load under `spec_version: 2`; no invalid-version example remains.
+- [ ] **J2. CLI + API reference.** Update `docs/CLI.md` (`login`, `migrate-spec`,
+  `refine --auto-apply`, streaming/cache flags) and `docs/API.md`
+  (`KeychainProvider`/`OAuthProvider`, the streaming surface, cache opt-out) to the
+  v2 public surface. *Exit:* every v2 CLI command + flag and public API symbol is
+  documented; no documented command/flag is absent from the code.
+- [ ] **J3. architecture.md + PRD scope.** Update `docs/architecture.md` from "v2
+  out of scope here"/future framing (L216, L305) to shipped reality (keychain/OAuth,
+  `--auto-apply`, streaming, composition, the two cache layers). Complete the
+  deferred Q0 PRD task: promote the six accepted §8 Out-of-Scope items into PRD §6
+  In-Scope (PLAN §5 L469). *Exit:* architecture.md describes the v2 design as
+  shipped; PRD §6 lists the six promoted items; the PLAN §5 promotion note is
+  resolved.
+
+### Track K — Release prep (LOW, gated)
+
+- [ ] **K1. Version bump.** Bump `pyproject.toml` `0.1.3`→`0.2.0` and
+  `src/prompiler/__init__.py` `__version__` in lockstep. *Exit:* both read
+  `0.2.0`; the `release.yml` verify-tag invariant (tag == `__version__`) would hold
+  for a `v0.2.0` tag; `uv build` produces sdist+wheel and `twine check` is clean in
+  a dry run.
+- [ ] **K2. Local release gate + golden + container dry-run.** Run the §9 local
+  gate, verify/regenerate the V2_VALIDATION golden snapshots
+  (`tests/test_e2e_clients.py`), and a CPU-only container build dry-run. *Exit:* §9
+  gate passes; golden snapshots stable (no unexpected drift); the container image
+  builds and runs CPU-only.
+- [ ] **K3. Changelog + release notes.** Curate the `git log <last-tag>..HEAD`
+  history into v0.2.0 release notes covering the v2 headline capabilities. *Exit:*
+  changelog/release notes drafted and committed, ready to feed the §5 Version Tag
+  Gate. **The actual `v0.2.0` tag is the §5 user-approved gate — never
+  self-applied.**
+
+### Q5 exit criteria (phase-done, feeds §7 gate)
+
+- [ ] All I*, J*, and K* boxes checked; full suite green; coverage ≥ 80% repo-wide.
+- [ ] mypy strict clean across the whole package; FR traceability matrix green
+  (FR-1..FR-14; FR-15 container excluded from the functional matrix).
+- [ ] Security: two-layer secret scan + bandit clean; a documented audit confirms
+  no payload/credential leakage in the v2 surface (RULES §8).
+- [ ] Docs cover the full v2 surface; no invalid `spec_version: 1` example remains;
+  PRD §6 reflects the promoted v2 scope.
+- [ ] Version is `0.2.0` in lockstep (pyproject + `__init__`); the release dry-run
+  (build + container) passes; changelog/release notes are ready.
+- [ ] §5 Version Tag Gate is the sole path to the single `v0.2.0` tag — explicit
+  user approval required, never self-approved.
 
 ---
 
