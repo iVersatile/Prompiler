@@ -452,7 +452,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
 
 ### Track I — Hardening (LOW–MEDIUM, audit-driven)
 
-- [ ] **I1. Security + secret audit.** Run the two-layer secret scan
+- [x] **I1. Security + secret audit.** Run the two-layer secret scan
   (`scripts/scan_secrets.py` + gitleaks) and `bandit -r src/` across the tree, and
   audit the new v2 code paths — modal bytes, stream chunks, credential
   read/refresh, auto-apply spec writes — for payload leakage below `trace` and
