@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__version__ = "0.1.3"
+__version__ = "0.2.0"
 
 COMPILER_PROTOCOL_VERSION = "2"
 """Compiler protocol version used in spec_hash derivation.
