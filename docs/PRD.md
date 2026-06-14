@@ -1,7 +1,7 @@
 # prompiler — Product Requirements Document
 
-**Status:** v1 spec locked
-**Date:** 2026-05-21
+**Status:** v2 spec locked — all six v2 features in scope and implemented (release pending `v0.2.0` tag)
+**Date:** 2026-06-14
 **License:** Apache 2.0
 **Name validity:** `prompiler` confirmed available on PyPI, npm, and the GitHub user/org namespace as of 2026-05-21 (GitHub repo search returned zero hits). Fallback `xpiler` was rejected — npm package and GitHub user already taken. The product name is therefore locked as **`prompiler`**.
 
@@ -114,7 +114,7 @@ These artefacts drift. Updating one without the others silently breaks productio
 The single source of truth. Hand-authored YAML.
 
 ```yaml
-spec_version: 1
+spec_version: 2
 name: invoice
 task: extract
 description: |
@@ -158,7 +158,7 @@ cross_field_constraints:
 Classification spec:
 
 ```yaml
-spec_version: 1
+spec_version: 2
 name: email_category
 task: classify
 description: Route inbound support email into one routing bucket.
@@ -169,6 +169,8 @@ labels:
   - { name: spam,       description: Unsolicited promotion, automated noise. }
 allow_multi_label: false
 ```
+
+**Input modalities (shipped in v2):** a spec may declare `input_modalities`, a list drawn from `text`, `image`, and `audio` (default `["text"]`, must be non-empty and unique). It is carried on the `EntitySpec` schema and projected into all four backend adapter payloads.
 
 ### 5.2 Tasks (v1)
 
@@ -218,7 +220,7 @@ Pydantic model = strict source of truth. Tool-call schemas = per-backend lossy p
 
 ### FR-1 — Spec Authoring
 
-- Specs are YAML files matching the EntitySpec schema (`spec_version: 1`).
+- Specs are YAML files matching the EntitySpec schema (`spec_version: 2`). A spec may set `extends: <path>` to inherit from a parent spec; the loader flattens the parent chain before validation. v1 specs are rejected on load with a `prompiler migrate-spec` hint.
 - `prompiler validate <path>` lints a spec without compiling.
 - Linter checks: name uniqueness, reserved names, field-name collisions, unsupported types per backend, missing descriptions.
 - Pre-commit hook target: `prompiler validate prompts/`.
@@ -261,7 +263,7 @@ results = await prompiler.run_batch("invoice", texts, backend="claude", concurre
 
 - Bounded concurrency with semaphore.
 - Per-item error isolation; partial results returned with `.errors` collection.
-- v1 is batch-only. Streaming deferred to v2.
+- Streaming (shipped in v2): a backend may implement the optional `StreamingBackendAdapter` protocol; `prompiler.run_stream(...)` returns an `AsyncIterator[StreamEvent]` and degrades to a single batch `call` when the backend does not support streaming.
 
 ### FR-6 — Eval Harness
 
@@ -283,8 +285,8 @@ results = await prompiler.run_batch("invoice", texts, backend="claude", concurre
 ### FR-7 — Refinement Loop
 
 - `prompiler refine <name> --report <eval-report.json>` proposes prompt patches.
-- v1: human-in-the-loop. Diff shown; user confirms.
-- v2: `--auto-apply` re-runs eval until metric threshold or N iterations.
+- Default: human-in-the-loop. Diff shown; user confirms.
+- Shipped in v2: `--auto-apply` runs an autonomous propose→apply→eval loop until a metric threshold or an iteration cap (default 3). It fails closed when the git working tree is not clean or cannot be read.
 
 ### FR-8 — MCP Server
 
@@ -293,14 +295,16 @@ results = await prompiler.run_batch("invoice", texts, backend="claude", concurre
 - Resources: `prompiler://specs/<name>` returns the spec; `prompiler://artefacts/<name>` returns generated prompt + tool schema.
 - Token-usage reporting included in MCP tool response metadata.
 
-### FR-9 — CLI Surface (v1)
+### FR-9 — CLI Surface
 
 ```
 prompiler validate <path|dir>
 prompiler compile <spec.yaml> | --all
+prompiler migrate-spec <spec.yaml>
 prompiler run <name> --input <file|-> [--backend <b>]
 prompiler eval <name> --fixture <f> [--backend <b>]
-prompiler refine <name> --report <r>
+prompiler refine <name> --report <r> [--auto-apply]
+prompiler login <backend>
 prompiler serve [--transport stdio|http] [--port N]
 prompiler registry list
 prompiler registry show <name>
@@ -309,8 +313,8 @@ prompiler registry show <name>
 ### FR-10 — Credential Provider
 
 - `CredentialProvider` protocol from day one.
-- v1 implementations: `EnvVarProvider`, `GoogleADCProvider` (free auth for Gemini via `google-auth`).
-- v2: `KeychainProvider`, `OAuthProvider`.
+- Base implementations: `EnvVarProvider`, `GoogleADCProvider` (free auth for Gemini via `google-auth`).
+- Shipped in v2: `KeychainProvider` (OS keychain via `keyring`, behind the `prompiler[keychain]` extra; a missing entry raises `CredentialError`) and `OAuthProvider` (file-backed token store at `~/.config/prompiler/oauth_tokens.json`, mode 0600, primed by `prompiler login`, with a headless `refresh_token` grant).
 - Required env vars documented per backend; missing-key error is loud and points to docs.
 
 ### FR-11 — Configuration Surface
@@ -350,7 +354,7 @@ fixtures_dir = "tests/fixtures"
 
 - Defaults: `temperature=0`, `seed=42`.
 - Adapters report whether seed is honoured (`supports("seed")`).
-- v2: hash-keyed cache layer (`(spec_hash, backend, model, input_hash) → result`).
+- Shipped in v2: two cache layers — a compile-time artefact cache (registry, keyed by `spec_hash`) and a runtime result cache (orchestrator, keyed on `(spec_hash, backend_class, model, input_hash, prompt_hash)`, opt-out via `disable_cache=True`).
 
 ### FR-15 — Container Distribution
 
@@ -405,19 +409,20 @@ fixtures_dir = "tests/fixtures"
 
 All FR-1..FR-15 above describe the v1 contract as shipped.
 
-### 8.2 v2 — accepted (`v0.2.0`, single batched release)
+### 8.2 v2 — in scope, implemented (`v0.2.0`, single batched release)
 
-The following were v1 non-goals and are now **in scope for v2**. See
-`docs/PLAN.md` for phase order, blast radius, and dependency sequencing.
+The following were v1 non-goals; they are now **in scope for v2 and shipped** —
+promoted into the §6 functional requirements above. See `docs/PLAN.md` for the
+phase order and dependency sequencing that delivered them.
 
 | v2 feature | PRD anchor | Notes |
 |------------|-----------|-------|
 | Multi-modal input (images, audio) | this §; §5.1 | Spec schema + all 4 adapter payloads. |
 | Auto-apply refinement | **FR-7** | `--auto-apply` re-runs eval to metric threshold or N iterations. |
-| Compile-result cache | **FR-14** | Hash-keyed `(spec_hash, backend, model, input_hash) → result`. |
+| Compile-result cache | **FR-14** | Runtime result cache keyed on `(spec_hash, backend_class, model, input_hash, prompt_hash)`, alongside the compile-time artefact cache. |
 | Keychain / OAuth credential flows | **FR-10** | `KeychainProvider`, `OAuthProvider` alongside env-var + ADC. |
-| Spec composition / inheritance | §5.1 | Bumps `spec_version` 1→2 (clean break, see §8.4); flatten-before-walk. |
-| Streaming responses | FR-5 | All 4 adapters + runtime contract; `extract` becomes async-iterator. |
+| Spec composition / inheritance | §5.1, **FR-1** | Bumps `spec_version` 1→2 (clean break, see §8.4); flatten-before-walk. |
+| Streaming responses | **FR-5** | All 4 adapters + runtime contract; `run_stream` returns an async iterator. |
 
 ### 8.3 Still out of scope (not in v2)
 

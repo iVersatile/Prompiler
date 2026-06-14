@@ -1,7 +1,7 @@
 # prompiler — Architecture
 
-**Status:** v1 architecture locked
-**Date:** 2026-05-21
+**Status:** v2 architecture locked — all six v2 features shipped (release pending `v0.2.0` tag)
+**Date:** 2026-06-14
 **Source of truth:** `PRD.md`, `PLAN.md`
 **License:** Apache 2.0
 
@@ -190,6 +190,7 @@ The two `False` rows are deliberate. Determinism is a property of the backend, n
 - **Spec model.** `EntitySpec` is itself a Pydantic v2 model. Field types restricted to: `string`, `integer`, `decimal`, `boolean`, `date`, `datetime`, `enum`, `array`, `object`, `optional` modifier.
 - **Hash.** `spec_hash = sha256(canonical_yaml(spec) || prompiler_version)`. Canonicalisation: keys sorted, list order preserved, integers normalised, strings UTF-8 NFC.
 - **Linter.** Pure-function checks. Detects: duplicate field names, reserved names, missing descriptions, unsupported types per declared backend target, contradictory `required`/`default`, suspicious regex patterns (catastrophic backtracking heuristic).
+- **Composition (shipped in v2).** A spec may set `extends: <path>` to inherit from a parent spec. The loader resolves and flattens the parent chain **before** walking it: parent specs are deep-merged with the child overriding, cycles are detected and rejected, and the `extends` key is stripped from the merged result so the compiler only ever sees a flat spec. Parent path resolution is intentionally unconfined — see `docs/adr/0002-extends-path-trust-model.md`. `spec_version` is `2` (bumped from `1` in v2); v1 specs are rejected on load with a `prompiler migrate-spec` hint.
 
 ### 2.2 Compiler (`compiler/`)
 
@@ -213,7 +214,9 @@ The two `False` rows are deliberate. Determinism is a property of the backend, n
 - **CredentialProvider** abstraction:
   - `EnvVarProvider` (default): reads env vars per backend (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.).
   - `GoogleADCProvider`: uses `google-auth` ADC chain (free for Gemini in dev).
-  - v2: `KeychainProvider`, `OAuthProvider` (out of scope here).
+  - `KeychainProvider` (shipped in v2): reads per-backend API keys from the OS keychain via the `keyring` library (lazy import, behind the `prompiler[keychain]` extra), keyed by backend name under the `prompiler` service; a missing entry raises `CredentialError`.
+  - `OAuthProvider` (shipped in v2): serves a cached bearer token from a file-backed store (`~/.config/prompiler/oauth_tokens.json`, mode `0600`, overridable via `PROMPILER_OAUTH_STORE`). The interactive grant is primed out-of-band by `prompiler login`; `resolve` is headless and performs a `refresh_token` grant when the cached token nears expiry (validating `expires_in` as a finite number), or raises a "run `prompiler login`" error when the store is unprimed.
+- **Streaming (shipped in v2).** Adapters may implement the optional `StreamingBackendAdapter` protocol (`stream_extract(...) -> AsyncIterator[StreamEvent]`, where `StreamEvent` is a frozen dataclass carrying incremental output). Adapters that do not implement it degrade transparently to the batch `call` path.
 - **Retry policy.** Transient (HTTP 429, 5xx, connection errors) → exponential backoff `1s, 2s, 4s`, max 3 attempts. Validation failure → 1 corrective retry with a "your previous output failed these constraints" feedback block. Total retry budget capped to prevent runaway cost.
 
 ### 2.3a Cassette Redaction Algorithm
@@ -262,8 +265,9 @@ Cassette load in **strict playback** (the default) does not re-scrub; it asserts
 
 ### 2.4 Runtime (`runtime/`)
 
-- **Registry.** In-process dict `name → ArtefactBundle`. File-system discovery scans `prompts/` on startup (configurable via `pyproject.toml` `[tool.prompiler]`). Programmatic registration via `register_from_path()` and `register_from_dict()`. Hash collision warns; duplicate name raises.
-- **Orchestrator.** Implements `run`, `run_sync`, `run_batch`. Pipeline: registry lookup → adapter resolve → call → JSON parse → Pydantic validate → retry-once → return typed instance.
+- **Registry (compile-time artefact cache).** In-process dict `name → ArtefactBundle`, keyed by `spec_hash`. File-system discovery scans `prompts/` on startup (configurable via `pyproject.toml` `[tool.prompiler]`). Programmatic registration via `register_from_path()` and `register_from_dict()`. Hash collision warns; duplicate name raises. This is the first of the two cache layers: it avoids recompiling a spec into its prompt/model/schema bundle.
+- **Orchestrator.** Implements `run`, `run_sync`, `run_batch`, and `run_stream` (shipped in v2 — returns `AsyncIterator[StreamEvent]`, importable from `prompiler.runtime.orchestrator`). Pipeline: registry lookup → adapter resolve → call → JSON parse → Pydantic validate → retry-once → return typed instance.
+- **Result cache (runtime, shipped in v2).** The second cache layer, distinct from the registry above: it caches the *validated* result model keyed on the 5-tuple `(spec_hash, backend_class, model, input_hash, prompt_hash)`. A hit short-circuits before the doc-size guardrail and adapter dispatch; a failing first attempt is never stored, so it cannot poison the validation-retry path. Per-call opt-out via `disable_cache=True`; introspection and eviction via `result_cache_info()` / `result_cache_clear()`.
 - **Doc-size guardrail.** `max_input_tokens` enforced before any API call. Adapter-specific tokenisers used where available; fallback to a conservative character-count heuristic.
 - **Error hierarchy.**
   ```
@@ -302,7 +306,7 @@ Cassette load in **strict playback** (the default) does not re-scrub; it asserts
 ### 2.6 Refine (`refine/`)
 
 - Tutor: LLM call with the eval report + current prompt + a fixed system prompt asking for a unified diff over the prompt text.
-- Diff applier: parses unified diff, shows preview to user, requires explicit confirmation. v1 never auto-applies. v2 adds `--auto-apply` with metric-threshold and iteration cap.
+- Diff applier: parses unified diff, shows preview to user, requires explicit confirmation by default. `refine --auto-apply` (shipped in v2) runs an autonomous propose→apply→eval loop gated by a metric threshold and an iteration cap (default 3). It fails closed when the git working tree is not clean — or cannot be read — so an autonomous run never commingles its edits with pre-existing uncommitted changes.
 - Re-eval after apply: surface metric delta vs previous report.
 - Refusal handling: if tutor declines or returns a malformed diff, surface `AdapterError` and exit non-zero. No silent fallback. (Refine composes on the sealed error hierarchy — §1.3 — rather than inventing a `RefineError` sibling.)
 
@@ -538,7 +542,7 @@ The production runtime image is a first-class v1 deliverable alongside the PyPI 
 
 1. Tokeniser strategy for `max_input_tokens` on backends without an official tokeniser (Gemini in particular). Interim: conservative character-count heuristic with `tokens_estimated=true` flag.
 2. Pricing-table update cadence — weekly scheduled action, or only on vendor pricing change? Default to weekly for v1; revisit in v2.
-3. MCP HTTP authentication strategy. v1: loopback-only + opt-in `--allow-public`. v2: bearer tokens or mTLS — out of scope here.
+3. MCP HTTP authentication strategy. Shipped: loopback-only by default + opt-in `--allow-public` / `--host`. Bearer tokens or mTLS remain future work — out of scope here (not shipped in v2).
 4. Cassette schema versioning when vendor changes wire format mid-cycle.
 
 ---
