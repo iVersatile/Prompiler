@@ -443,8 +443,8 @@ FR-13/14/15, §8.2 (v2 accepted set).
   `docs/TUTORIAL.md:27` still shows `spec_version: 1`, which is **invalid** after
   Q3 bumped specs to version 2. `docs/architecture.md` frames v2 features as "out
   of scope here"/future (e.g. L216, L305) rather than shipped.
-- **PRD §8→§6 promotion is a still-open Q0 task** (PLAN §5, L469): promote the six
-  accepted §8 Out-of-Scope items into PRD §6 In-Scope.
+- **PRD §8→§6 promotion** (PLAN §5): the six accepted §8 Out-of-Scope items are
+  promoted into PRD §6 In-Scope — resolved in J3.
 - **Gate evidence sources.** The FR traceability matrix
   (`tests/test_fr_traceability.py`, FR-1..FR-14; FR-15 container excluded from the
   functional matrix) and the PRD §7.1 perf budgets are what the §7 Phase Done Gate
@@ -482,7 +482,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
   (`KeychainProvider`/`OAuthProvider`, the streaming surface, cache opt-out) to the
   v2 public surface. *Exit:* every v2 CLI command + flag and public API symbol is
   documented; no documented command/flag is absent from the code.
-- [ ] **J3. architecture.md + PRD scope.** Update `docs/architecture.md` from "v2
+- [x] **J3. architecture.md + PRD scope.** Update `docs/architecture.md` from "v2
   out of scope here"/future framing (L216, L305) to shipped reality (keychain/OAuth,
   `--auto-apply`, streaming, composition, the two cache layers). Complete the
   deferred Q0 PRD task: promote the six accepted §8 Out-of-Scope items into PRD §6
@@ -578,8 +578,9 @@ promotion of already-documented non-goals, not net-new invention:
 | Streaming | §8; §3 v1 non-goals |
 
 Not promoted: **Hosted SaaS UI** (§8 — out of OSS core) and **§12 Code of
-Conduct** (governance only, zero runtime impact). Next PRD edit: promote the six
-accepted items from §8 Out-of-Scope into §6 In-Scope (a Q0 task).
+Conduct** (governance only, zero runtime impact). Resolved in J3: the six
+accepted items were promoted from §8 Out-of-Scope into the §6 functional
+requirements (shipped framing), and PRD §8.2 now reads "in scope, implemented".
 
 ---
 
