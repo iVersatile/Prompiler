@@ -459,7 +459,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
   credential leakage to stdout/stderr (RULES §8). *Exit:* secret scan + bandit
   report clean; a short audit note confirms no payload/credential leakage in the
   v2 surface; any fix carries an `Applying LL-NNN` cite.
-- [ ] **I2. Perf-budget verification.** Confirm PRD §7.1 budgets still hold after
+- [x] **I2. Perf-budget verification.** Confirm PRD §7.1 budgets still hold after
   the v2 additions (cache, streaming, composition): compile <200ms, validate
   <50ms, run overhead <50ms, `run_batch` 100@conc=8 <60s, MCP cold start <1s.
   *Exit:* a perf check (script/test) records each budget as met; any regression is
