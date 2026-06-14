@@ -472,7 +472,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
 
 ### Track J — Docs refresh to v2 (LOW, isolated)
 
-- [ ] **J1. README + TUTORIAL.** Refresh `README.md` to the shipped v2 surface
+- [x] **J1. README + TUTORIAL.** Refresh `README.md` to the shipped v2 surface
   (multimodal, `--auto-apply`, streaming, caches, `login`, `migrate-spec`,
   composition); fix `docs/TUTORIAL.md:27` `spec_version: 1`→`2` and any other
   v1-only examples. *Exit:* README lists every v2 capability; TUTORIAL examples

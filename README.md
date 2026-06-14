@@ -4,9 +4,23 @@ Spec-to-artefact prompt compiler with multi-vendor adapters and MCP server.
 
 `prompiler` compiles a declarative specification into deterministic prompt artefacts for Anthropic, OpenAI, Gemini, and Ollama backends, and exposes the compiler over a Model Context Protocol (MCP) server.
 
+## Features
+
+- **Declarative specs with composition.** Author extraction specs in YAML (`spec_version: 2`) and share common fields across specs with `extends`.
+- **Deterministic codegen.** Compile a spec into a byte-stable prompt, a Pydantic v2 model, and per-backend tool schemas.
+- **Multi-vendor adapters.** Anthropic, OpenAI, Gemini, and Ollama behind one `BackendAdapter` contract.
+- **Multimodal input.** Attach images and other modal parts (`ModalContent` / `modal_parts`) alongside the document text.
+- **Streaming.** Consume incremental results via `run_stream` (`StreamEvent`) from backends that support it.
+- **Caching.** A spec→artefact compile cache and a call→result cache, both on by default; opt out with `PROMPILER_DISABLE_CACHE` or `disable_cache=True`.
+- **Self-correcting extraction.** `run` / `run_sync` validate the response against the model and perform one corrective retry on failure.
+- **Iterative refinement.** `prompiler refine --auto-apply` runs a bounded propose→apply→evaluate loop against fixtures.
+- **Credential management.** `prompiler login` stores OAuth tokens; keychain and OAuth providers resolve vendor credentials.
+- **Spec migration.** `prompiler migrate-spec` rewrites a v1 spec to v2 in place (idempotent).
+- **MCP server.** Expose the compiler over the Model Context Protocol for agent tooling.
+
 ## Status
 
-`0.1.0` — first public release (Phase P8: hardening, docs, release). See [`docs/PLAN.md`](docs/PLAN.md) for the roadmap and [`docs/PRD.md`](docs/PRD.md) for the product spec.
+The v2 feature set is complete; the project is in its final hardening, docs, and release phase. See [`docs/PLAN.md`](docs/PLAN.md) for the roadmap and [`docs/PRD.md`](docs/PRD.md) for the product spec.
 
 New here? Start with the [Tutorial](docs/TUTORIAL.md) for a cold-install-to-extraction walkthrough, then the [Python API reference](docs/API.md).
 
