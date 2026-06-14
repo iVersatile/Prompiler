@@ -45,6 +45,10 @@ WORKDIR /app
 # the project-install layer, not the dependency-install layer.
 COPY pyproject.toml uv.lock README.md LICENSE NOTICE ./
 COPY src ./src
+# Example specs are force-included into the wheel (see pyproject
+# [tool.hatch.build.targets.wheel.force-include]) so the materialized venv is
+# self-contained; the build fails without these source files present.
+COPY examples ./examples
 
 # `--no-dev` excludes ruff/mypy/pytest/pre-commit (runtime image stays lean).
 # `--no-editable` materializes the project as a wheel into .venv so the runtime

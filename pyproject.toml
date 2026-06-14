@@ -60,6 +60,23 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/prompiler"]
 
+# Ship the repo-root example specs as package data so a wheel install is
+# self-contained: the MCP server resolves them via importlib.resources from
+# ``prompiler/examples/`` (see ``_resolve_examples_dir``). hatchling's
+# force-include keys cannot glob, so every ``examples/*.yaml`` is listed
+# explicitly; ``test_every_example_spec_is_force_included_in_wheel`` guards
+# against a new spec being added without a matching entry (LL-012).
+[tool.hatch.build.targets.wheel.force-include]
+"examples/citation.yaml" = "prompiler/examples/citation.yaml"
+"examples/contract_obligation.yaml" = "prompiler/examples/contract_obligation.yaml"
+"examples/email_category.yaml" = "prompiler/examples/email_category.yaml"
+"examples/incident_event.yaml" = "prompiler/examples/incident_event.yaml"
+"examples/invoice.yaml" = "prompiler/examples/invoice.yaml"
+"examples/medical_letter.yaml" = "prompiler/examples/medical_letter.yaml"
+"examples/purchase_order.yaml" = "prompiler/examples/purchase_order.yaml"
+"examples/receipt.yaml" = "prompiler/examples/receipt.yaml"
+"examples/support_ticket.yaml" = "prompiler/examples/support_ticket.yaml"
+
 [tool.hatch.build.targets.sdist]
 include = ["src/prompiler", "README.md", "LICENSE", "NOTICE"]
 

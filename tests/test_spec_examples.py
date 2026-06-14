@@ -8,6 +8,7 @@ public surface so the shipped examples can never silently rot.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,24 @@ pytestmark = pytest.mark.unit
 
 def test_examples_dir_is_non_empty() -> None:
     assert _EXAMPLE_PATHS, f"no example specs found under {_EXAMPLES_DIR}"
+
+
+def test_every_example_spec_is_force_included_in_wheel() -> None:
+    """Each repo-root example spec must ship inside the wheel.
+
+    The wheel resolves examples via ``importlib.resources`` from
+    ``prompiler/examples/`` (see ``_resolve_examples_dir``). hatchling's
+    ``force-include`` list cannot glob, so a new ``examples/*.yaml`` added
+    without a matching entry would ship a wheel whose MCP server cannot see
+    the spec — the exact class of release defect LL-012 records.
+    """
+    repo_root = _EXAMPLES_DIR.parent
+    pyproject = tomllib.loads((repo_root / "pyproject.toml").read_text(encoding="utf-8"))
+    force_include = pyproject["tool"]["hatch"]["build"]["targets"]["wheel"]["force-include"]
+    included = {Path(src).name for src in force_include}
+    on_disk = {p.name for p in _EXAMPLE_PATHS}
+    missing = on_disk - included
+    assert not missing, f"example specs missing a wheel force-include entry: {sorted(missing)}"
 
 
 @pytest.mark.parametrize("path", _EXAMPLE_PATHS, ids=_EXAMPLE_IDS)
