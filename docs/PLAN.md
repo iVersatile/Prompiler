@@ -502,7 +502,7 @@ FR-13/14/15, §8.2 (v2 accepted set).
   (`tests/test_e2e_clients.py`), and a CPU-only container build dry-run. *Exit:* §9
   gate passes; golden snapshots stable (no unexpected drift); the container image
   builds and runs CPU-only.
-- [ ] **K3. Changelog + release notes.** Curate the `git log <last-tag>..HEAD`
+- [x] **K3. Changelog + release notes.** Curate the `git log <last-tag>..HEAD`
   history into v0.2.0 release notes covering the v2 headline capabilities. *Exit:*
   changelog/release notes drafted and committed, ready to feed the §5 Version Tag
   Gate. **The actual `v0.2.0` tag is the §5 user-approved gate — never
