@@ -646,3 +646,35 @@ requirements (shipped framing), and PRD §8.2 now reads "in scope, implemented".
 Full v1 plan (phases P0–P8, test strategy, risks, v1 DoD) is preserved in
 `docs/PLAN.BK.MD`. v1 shipped as `v0.1.1` (PyPI + GitHub release + demo). Do not
 re-litigate closed v1 phases here.
+
+---
+
+# prompiler — Delivery Plan (v3)
+
+**Status:** v3 NOT started — deferral/scope register only
+**Date:** 2026-06-15
+**Source of truth:** PRD.md §8.3 (still-out-of-scope) + v2 PLAN §0/§1 (deferred carry-over)
+**Predecessor:** v2 delivered (`v0.2.0` on `e042844`); V1 version single-sourcing merged (`d0d8f88`). All Q1–Q5 + V1 closed.
+
+> No v3 phase is open. This section is a register of parked items with verdicts
+> and triggers. Nothing here enters the engineering queue until its trigger
+> fires AND a fresh `go` opens a phase (RULES §6). Items are independent — no
+> hard dependency chain — so order is set by trigger-state then complexity.
+
+---
+
+## v3.0 Deferred / out-of-scope register (carry-over from v2)
+
+| ID | Item | Class | Complexity | Verdict | Trigger to revive |
+|----|------|-------|-----------|---------|-------------------|
+| **V3-1** | Field provenance (per-field origin spec on flattened `EntitySpec`) | Deferred | **S–M** | **DEFER.** Origin-tracking infra already exists (`loader.py::_lookup_origin` resolves inherited field → parent file for errors). Work = persist origin onto the model past `_strip_marks` **without** polluting `spec_hash` (`model_dump()` must stay provenance-free). Don't build a producer with no consumer. | First *non-error* consumer of per-field origin: diff/debug tooling or "where did this field come from". Error messages already resolve origin without it. |
+| **V3-2** | codegen-IR (promote `walk.py` visitor → FieldSpec IR module) | Deferred | **M** | **DEFER.** `walk.py` is already a shared `FieldVisitor[T]` Protocol with TWO consumers (`codegen.py` static + `compiler/model.py` dynamic) and the Protocol already prevents traversal/naming drift. An IR pays off only at the 3rd emitter — YAGNI until then. | A genuine **3rd renderer** (e.g. TypeScript / JSON-Schema-dialect emitter) OR a codegen-vs-runtime drift incident. |
+| **V3-3** | Code of Conduct (custom vs verbatim CC 2.1) | Governance | **XS** (non-code) | **DEFER.** Governance, not engineering. Verbatim CC 2.1 stands as default; customise only on trigger. Not a phase — a doc change. | First external contributor PR OR maintainer team > 3. |
+| **V3-4** | Fine-tuned prompt optimisation (training/search-based optimiser) | Out of scope | **XL** | **OUT.** Distinct from the shipped human-approved `refine` tutor loop (single LLM-proposed diff). A training/search optimiser is net-new research-grade work and collides with the hard "no GPU-only deps; CPU-only must work" constraint (RULES §8). No trigger. | None defined — would require a fresh PRD goal + constraint reconciliation. |
+| **V3-5** | Hosted UI / GUI | Out of scope (non-OSS) | **XL** | **OUT of OSS core.** A product/hosting tier (frontend + HTTP server + auth + deploy), not a compiler feature. PRD §8.3 keeps it as a separate non-OSS track. | None within this repo — separate repo/track + product decision. |
+
+**Delivery order if/when triggers fire:** V3-1 (smallest, infra mostly present) →
+V3-2 (contained refactor behind a tested seam) → V3-3 (trivial governance doc).
+V3-4 and V3-5 do not enter this repo's engineering queue without a fresh PRD goal.
+
+**No item has a fired trigger as of 2026-06-15. v3 remains un-opened by design.**
