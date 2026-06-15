@@ -563,7 +563,7 @@ testing the runtime attribute); no change to COMPILER_PROTOCOL_VERSION semantics
   assert it equals `prompiler.__version__`. Converts the stale-install case
   (pyproject bumped, package not reinstalled) from silent drift into a loud
   failure. *Exit:* the test fails when the two diverge; passes after `uv sync`.
-- [ ] **B2. Preserve verify-tag (no workflow change).** Confirm the unchanged
+- [x] **B2. Preserve verify-tag (no workflow change).** Confirm the unchanged
   `release.yml` verify-tag step still resolves `__version__` from installed
   metadata. *Exit:* the local equivalent —
   `uv run python -c 'import prompiler; print(prompiler.__version__)'` — returns
