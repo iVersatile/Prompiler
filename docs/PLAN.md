@@ -672,9 +672,13 @@ re-litigate closed v1 phases here.
 | **V3-3** | Code of Conduct (custom vs verbatim CC 2.1) | Governance | **XS** (non-code) | **DEFER.** Governance, not engineering. Verbatim CC 2.1 stands as default; customise only on trigger. Not a phase — a doc change. | First external contributor PR OR maintainer team > 3. |
 | **V3-4** | Fine-tuned prompt optimisation (training/search-based optimiser) | Out of scope | **XL** | **OUT.** Distinct from the shipped human-approved `refine` tutor loop (single LLM-proposed diff). A training/search optimiser is net-new research-grade work and collides with the hard "no GPU-only deps; CPU-only must work" constraint (RULES §8). No trigger. | None defined — would require a fresh PRD goal + constraint reconciliation. |
 | **V3-5** | Hosted UI / GUI | Out of scope (non-OSS) | **XL** | **OUT of OSS core.** A product/hosting tier (frontend + HTTP server + auth + deploy), not a compiler feature. PRD §8.3 keeps it as a separate non-OSS track. | None within this repo — separate repo/track + product decision. |
+| **V3-6** | First real consumer (cliniq medication + appointment) | Adoption / dogfooding | **M** (cliniq-side) | **DRAFT.** prompiler is the already-shipped implementation of cliniq's planned *Bridgeform* slot (Phase 2B P2B-05/06). PoC drafted at [`docs/consumers/cliniq/`](consumers/cliniq/README.md): two `EntitySpec` YAMLs, a sync→async shim, two `run_sync` extractor rewrites, and Layer-1 mapping-parity golden tests. Reference only — not wired into prompiler runtime, not pytest-collected. Layer-2 prompt/output parity remains unmeasured. | cliniq opens Phase 2B (P2B-05/06), OR prompiler needs real-consumer regression/API-ergonomics signal beyond mocks. |
 
 **Delivery order if/when triggers fire:** V3-1 (smallest, infra mostly present) →
 V3-2 (contained refactor behind a tested seam) → V3-3 (trivial governance doc).
 V3-4 and V3-5 do not enter this repo's engineering queue without a fresh PRD goal.
+V3-6 is consumer-side (cliniq) work, not a prompiler engineering item — the
+drafts exist to de-risk adoption, not to open a prompiler phase.
 
 **No item has a fired trigger as of 2026-06-15. v3 remains un-opened by design.**
+The V3-6 cliniq PoC is reference material; its trigger (cliniq Phase 2B) is unfired.

@@ -1,0 +1,30 @@
+spec_version: 2
+name: appointment
+task: extract
+description: Extract every clinical appointment referenced in a document.
+max_input_tokens: 8000
+fields:
+  - name: appointments
+    type: array
+    required: true
+    description: One entry per distinct appointment found in the text.
+    item:
+      type: object
+      description: A single clinical appointment.
+      fields:
+        - name: date
+          type: date
+          required: true
+          description: Appointment date, ISO 8601 (YYYY-MM-DD).
+        - name: reason
+          type: string
+          required: false
+          description: Stated reason or purpose for the appointment.
+        - name: status
+          type: enum
+          required: true
+          description: Whether the appointment is past, upcoming, or cancelled.
+          values:
+            - past
+            - upcoming
+            - cancelled
