@@ -1,0 +1,46 @@
+spec_version: 2
+name: medication
+task: extract
+description: Extract every prescribed medication from a clinical document.
+max_input_tokens: 8000
+fields:
+  - name: medications
+    type: array
+    required: true
+    description: One entry per distinct prescribed medication found in the text.
+    item:
+      type: object
+      description: A single prescribed medication.
+      fields:
+        - name: name
+          type: string
+          required: true
+          description: Drug name as written (generic or brand).
+        - name: dose
+          type: string
+          required: false
+          description: Strength and unit, e.g. "15 mg".
+        - name: frequency
+          type: string
+          required: false
+          description: Dosing frequency, e.g. "once daily".
+        - name: start_date
+          type: date
+          required: false
+          description: Date the medication was started, ISO 8601 (YYYY-MM-DD).
+        - name: end_date
+          type: date
+          required: false
+          description: Date the medication was stopped, ISO 8601 (YYYY-MM-DD).
+        - name: prescribed_by_name
+          type: string
+          required: false
+          description: Name of the prescribing clinician, if stated.
+        - name: duration_label
+          type: string
+          required: false
+          description: Free-text course length, e.g. "7 days", "ongoing".
+        - name: citation
+          type: string
+          required: false
+          description: Verbatim source sentence supporting this entry.
