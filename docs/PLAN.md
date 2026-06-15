@@ -571,12 +571,12 @@ testing the runtime attribute); no change to COMPILER_PROTOCOL_VERSION semantics
 
 ### V1 exit criteria (phase-done, feeds §7 gate)
 
-- [ ] `pyproject.toml` is the single version literal; `__version__` derived (A1).
-- [ ] COMPILER_PROTOCOL_VERSION independence guarded (A2, RULES §10).
-- [ ] `test_smoke.py` guards pyproject-literal == `__version__` (B1).
-- [ ] `release.yml` verify-tag invariant (tag == `v$__version__`) preserved;
+- [x] `pyproject.toml` is the single version literal; `__version__` derived (A1).
+- [x] COMPILER_PROTOCOL_VERSION independence guarded (A2, RULES §10).
+- [x] `test_smoke.py` guards pyproject-literal == `__version__` (B1).
+- [x] `release.yml` verify-tag invariant (tag == `v$__version__`) preserved;
   `--version` CLI still emits the derived value (B2, regression).
-- [ ] Code commit cites a new LL (importlib.metadata single-source retires K1
+- [x] Code commit cites a new LL (importlib.metadata single-source retires K1
   lockstep).
 
 ---
