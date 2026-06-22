@@ -13,10 +13,13 @@
 name: nightly-live-smoke
 
 on:
-  schedule:
-    # 06:00 UTC daily — after typical vendor maintenance windows, well before
-    # EU working hours so a green/red signal is visible by morning standup.
-    - cron: "0 6 * * *"
+  # PAUSED until further notice (2026-06-22): the nightly cron is disabled to
+  # stop automatic live vendor-API runs. To resume, uncomment the schedule
+  # block below. Manual runs remain available via workflow_dispatch.
+  # schedule:
+  #   # 06:00 UTC daily — after typical vendor maintenance windows, well before
+  #   # EU working hours so a green/red signal is visible by morning standup.
+  #   - cron: "0 6 * * *"
   workflow_dispatch:
 
 permissions:
